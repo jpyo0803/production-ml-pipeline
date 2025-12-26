@@ -1,0 +1,3 @@
+feast==0.40.1
+pandas
+pyarrow
