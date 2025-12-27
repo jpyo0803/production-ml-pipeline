@@ -1,0 +1,34 @@
+services:
+  feature-store:
+    build: ./feature_store
+    container_name: feature-store
+    volumes:
+      - ./feature_store/feast_repo:/app/feast_repo
+      - ./feature_store/data:/app/data
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:latest
+    container_name: mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlruns:/mlflow/mlruns
+    command: >
+      mlflow server
+      --backend-store-uri /mlflow/mlruns
+      --default-artifact-root /mlflow/mlruns
+      --host 0.0.0.0
+      --allowed-hosts '*'
+
+  training:
+    build: ./training
+    depends_on:
+      - feature-store
+    volumes:
+      - ./training:/app
+      - ./feature_store/feast_repo:/app/feast_repo
+      - ./feature_store/data:/app/data
+      - ./mlruns:/mlflow/mlruns
+    environment:
+      - FEAST_REPO_PATH=/app/feast_repo
+      - MLFLOW_TRACKING_URI=http://mlflow:5000

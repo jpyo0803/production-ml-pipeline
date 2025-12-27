@@ -1,3 +1,6 @@
 **/*.csv
 **/*.parquet
 **/*.db
+**/__pycache__/
+mlruns/
+**/artifacts/
