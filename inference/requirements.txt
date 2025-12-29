@@ -3,4 +3,5 @@ uvicorn
 mlflow
 pandas
 torch
-joblib
+botocore
+boto3

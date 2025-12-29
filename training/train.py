@@ -3,13 +3,14 @@ from config import Config
 import torch
 
 from model import TabularModel
+from model_wrapper import CreditModelWrapper
+
 from sklearn.metrics import roc_auc_score
+from sklearn.preprocessing import StandardScaler
 
 import mlflow
 import mlflow.pytorch
 import os
-
-import joblib
 
 mlflow.set_tracking_uri(os.environ["MLFLOW_TRACKING_URI"])
 mlflow.set_experiment("home-credit-default")
@@ -18,7 +19,16 @@ config = Config()
 device = config.device
 
 def train():
-    X_train, y_train, X_val, y_val, scaler = load_dataset()
+    X_train, y_train, X_val, y_val = load_dataset()
+
+    scaler = StandardScaler()
+    scaler.fit(X_train)
+
+    X_train = torch.tensor(scaler.transform(X_train), dtype=torch.float32).to(device)
+    y_train = torch.tensor(y_train, dtype=torch.float32).to(device)
+
+    X_val = torch.tensor(scaler.transform(X_val), dtype=torch.float32).to(device)
+    y_val = torch.tensor(y_val, dtype=torch.float32).to(device)
 
     with mlflow.start_run():
         model = TabularModel(input_dim=X_train.shape[1]).to(device)
@@ -43,18 +53,18 @@ def train():
 
         mlflow.log_metric("val_auc", auc)
 
-        # scaler artifact 저장
-        os.makedirs("artifacts", exist_ok=True)
-        scaler_path = "artifacts/scaler.joblib"
-        joblib.dump(scaler, scaler_path)
-        mlflow.log_artifact(scaler_path, artifact_path="preprocessing")
+        wrapped_model = CreditModelWrapper(
+            model=model,
+            scaler=scaler,
+            device=device
+        )
 
         # 모델 저장 및 등록
-        mlflow.pytorch.log_model(
-            model,
-            artifact_path="tabular_model",
+        mlflow.pyfunc.log_model(
+            artifact_path="model",
+            python_model=wrapped_model,
             registered_model_name="HomeCreditDefaultModel",
-            code_paths=["model.py"], # model.py 파일도 함께 저장
+            code_paths=["model.py", "model_wrapper.py"],
         )
 
 if __name__ == "__main__":

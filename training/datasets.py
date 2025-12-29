@@ -6,10 +6,6 @@ from datetime import datetime
 from feast import FeatureStore
 from sklearn.model_selection import train_test_split
 
-from sklearn.preprocessing import StandardScaler
-
-import torch
-
 config = Config()
 
 device = config.device
@@ -53,15 +49,4 @@ def load_dataset():
         X, y, test_size=0.2, random_state=42, stratify=y
     )
 
-    # Split 후에 스케일링 적용해 data leakage 방지
-
-    scaler = StandardScaler()
-    X_train = scaler.fit_transform(X_train)
-    X_val = scaler.transform(X_val)
-
-    X_train = torch.tensor(X_train, dtype=torch.float32)
-    y_train = torch.tensor(y_train, dtype=torch.float32)
-    X_val = torch.tensor(X_val, dtype=torch.float32)
-    y_val = torch.tensor(y_val, dtype=torch.float32)
-
-    return X_train, y_train, X_val, y_val, scaler
+    return X_train, y_train, X_val, y_val
