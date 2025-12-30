@@ -1,7 +1,7 @@
 feast==0.40.1
 pandas
 pyarrow
-torch --index-url https://download.pytorch.org/whl/cpu # 현재는 CPU 버전 사용
+torch
 scikit-learn
 mlflow
 boto3
