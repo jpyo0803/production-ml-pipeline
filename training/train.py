@@ -9,7 +9,8 @@ from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import StandardScaler
 
 import mlflow
-import mlflow.pytorch
+from mlflow.tracking import MlflowClient
+
 import os
 
 mlflow.set_tracking_uri(os.environ["MLFLOW_TRACKING_URI"])
@@ -60,11 +61,25 @@ def train():
         )
 
         # 모델 저장 및 등록
-        mlflow.pyfunc.log_model(
+        result = mlflow.pyfunc.log_model(
             artifact_path="model",
             python_model=wrapped_model,
             registered_model_name="HomeCreditDefaultModel",
             code_paths=["model.py", "model_wrapper.py"],
+        )
+
+        client = MlflowClient()
+
+        model_versions = client.search_model_versions(
+            filter_string="name='HomeCreditDefaultModel'",
+            order_by=["creation_timestamp DESC"],
+            max_results=1
+        )
+
+        client.set_registered_model_alias(
+            name="HomeCreditDefaultModel",
+            alias="prod",
+            version=model_versions[0].version
         )
 
 if __name__ == "__main__":
