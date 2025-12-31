@@ -1,20 +1,32 @@
-from config import Config
-import pandas as pd
 import os
-
+import pandas as pd
 from datetime import datetime
 from feast import FeatureStore
 from sklearn.model_selection import train_test_split
 
-config = Config()
-
-device = config.device
 FEAST_REPO_PATH = os.environ.get("FEAST_REPO_PATH", "/app/feast_repo")
+LABEL_URI = os.environ.get("LABEL_URI", "s3://ml-data/raw/application_train.csv")
+
+AWS_KEY = os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin")
+AWS_SECRET = os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin123")
+AWS_ENDPOINT = os.environ.get("AWS_ENDPOINT_URL", "http://minio:9000")
+
+def s3_opts():
+    return {
+        "key": AWS_KEY,
+        "secret": AWS_SECRET,
+        "client_kwargs": {"endpoint_url": AWS_ENDPOINT},
+    }
 
 def load_dataset():
-    labels = pd.read_csv(config.label_path, usecols=["SK_ID_CURR", "TARGET"])
+    labels = pd.read_csv(
+        LABEL_URI,
+        usecols=["SK_ID_CURR", "TARGET"],
+        storage_options=s3_opts(),
+    )
 
     store = FeatureStore(repo_path=FEAST_REPO_PATH)
+
     entity_df = pd.DataFrame({
         "SK_ID_CURR": labels["SK_ID_CURR"],
         "event_timestamp": [datetime(2018, 1, 1)] * len(labels)
@@ -38,10 +50,8 @@ def load_dataset():
         features=features,
     ).to_df()
 
-    df = feat_df.merge(labels, on="SK_ID_CURR", how="inner")
-    
-    df = df.fillna(0.0)
-    
+    df = feat_df.merge(labels, on="SK_ID_CURR", how="inner").fillna(0.0)
+
     X = df.drop(columns=["SK_ID_CURR", "event_timestamp", "TARGET"]).values
     y = df["TARGET"].values
 

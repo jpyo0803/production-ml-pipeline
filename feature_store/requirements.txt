@@ -1,3 +1,5 @@
 feast==0.40.1
 pandas
 pyarrow
+boto3
+s3fs

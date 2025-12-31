@@ -5,3 +5,4 @@ torch
 scikit-learn
 mlflow
 boto3
+s3fs

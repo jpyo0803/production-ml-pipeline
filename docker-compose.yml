@@ -3,10 +3,21 @@ version: "3.9"
 services:
   feature-store:
     build: ./feature_store
-    container_name: feature-store
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
     volumes:
       - ./feature_store/feast_repo:/app/feast_repo
-      - ./feature_store/data:/app/data
+    environment:
+      # MinIO(S3)에서 raw 읽고 processed/feast에 씀
+      RAW_S3_PREFIX: s3://ml-data/raw
+      OUT_S3_PREFIX: s3://ml-data/processed
+      FEAST_REGISTRY_S3: s3://ml-data/feast/registry.db
+
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin123
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ENDPOINT_URL: http://minio:9000
 
   minio:
     image: minio/minio:latest
@@ -21,7 +32,7 @@ services:
     volumes:
       - minio_data:/data
 
-  # MinIO에 mlflow 버킷 생성 (1회성)
+  # MinIO에 버킷 생성 (1회성)
   minio-init:
     image: minio/mc:latest
     depends_on:
@@ -30,8 +41,10 @@ services:
       /bin/sh -c "
       mc alias set local http://minio:9000 minioadmin minioadmin123;
       mc mb -p local/mlflow || true;
+      mc mb -p local/ml-data || true;
       exit 0;
       "
+    restart: "no"
 
   # PostgreSQL (MLflow Backend Store)
   postgres:
@@ -57,7 +70,6 @@ services:
       - postgres
       - minio-init
     environment:
-      # MinIO(S3) 연결
       AWS_ACCESS_KEY_ID: minioadmin
       AWS_SECRET_ACCESS_KEY: minioadmin123
       AWS_DEFAULT_REGION: us-east-1
@@ -79,14 +91,18 @@ services:
     environment:
       FEAST_REPO_PATH: /app/feast_repo
       MLFLOW_TRACKING_URI: http://mlflow:5000
+
+      # labels도 S3에서 읽게 변경
+      LABEL_URI: s3://ml-data/raw/application_train.csv
+
       AWS_ACCESS_KEY_ID: minioadmin
       AWS_SECRET_ACCESS_KEY: minioadmin123
       AWS_DEFAULT_REGION: us-east-1
+      AWS_ENDPOINT_URL: http://minio:9000
       MLFLOW_S3_ENDPOINT_URL: http://minio:9000
     volumes:
       - ./training:/app
       - ./feature_store/feast_repo:/app/feast_repo
-      - ./feature_store/data:/app/data
 
   inference:
     build: ./inference
