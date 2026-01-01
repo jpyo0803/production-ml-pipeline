@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inference
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: inference}
+  template:
+    metadata:
+      labels: {app: inference}
+    spec:
+      containers:
+        - name: inference
+          image: inference:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: MLFLOW_TRACKING_URI
+              value: http://mlflow:5000
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom: {secretKeyRef: {name: minio-credentials, key: AWS_ACCESS_KEY_ID}}
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom: {secretKeyRef: {name: minio-credentials, key: AWS_SECRET_ACCESS_KEY}}
+            - name: AWS_DEFAULT_REGION
+              valueFrom: {secretKeyRef: {name: minio-credentials, key: AWS_DEFAULT_REGION}}
+            - name: MLFLOW_S3_ENDPOINT_URL
+              valueFrom: {secretKeyRef: {name: minio-credentials, key: MLFLOW_S3_ENDPOINT_URL}}

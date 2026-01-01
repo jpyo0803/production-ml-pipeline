@@ -1,0 +1,62 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: feature-store
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+
+      volumes:
+        - name: feast-data
+          persistentVolumeClaim:
+            claimName: feast-registry-pvc
+
+      containers:
+        - name: feature-store
+          image: feature-store:latest
+          imagePullPolicy: IfNotPresent
+
+          env:
+            - name: RAW_S3_PREFIX
+              value: s3://ml-data/raw
+            - name: OUT_S3_PREFIX
+              value: s3://ml-data/processed
+
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: AWS_DEFAULT_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: AWS_DEFAULT_REGION
+            - name: AWS_ENDPOINT_URL
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: AWS_ENDPOINT_URL
+
+          volumeMounts:
+            - name: feast-data
+              mountPath: /app/feast_repo/data
+
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "[Feature Store] ETL"
+              python scripts/build_application_features.py
+              python scripts/build_bureau_features.py
+
+              echo "[Feature Store] Feast apply"
+              cd feast_repo
+              feast apply

@@ -1,0 +1,71 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: training
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+
+      volumes:
+        # Feast repo 코드 (ConfigMap)
+        - name: feast-repo
+          configMap:
+            name: feast-repo
+
+        # Feast data / registry (PVC)
+        - name: feast-data
+          persistentVolumeClaim:
+            claimName: feast-registry-pvc
+
+      containers:
+        - name: training
+          image: training:latest
+          imagePullPolicy: IfNotPresent
+
+          env:
+            - name: FEAST_REPO_PATH
+              value: /app/feast_repo
+
+            - name: MLFLOW_TRACKING_URI
+              value: http://mlflow:5000
+
+            - name: LABEL_URI
+              value: s3://ml-data/raw/application_train.csv
+
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: AWS_DEFAULT_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: AWS_DEFAULT_REGION
+            - name: AWS_ENDPOINT_URL
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: AWS_ENDPOINT_URL
+            - name: MLFLOW_S3_ENDPOINT_URL
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: MLFLOW_S3_ENDPOINT_URL
+
+          volumeMounts:
+            # Feast repo 코드 (read-only)
+            - name: feast-repo
+              mountPath: /app/feast_repo
+              readOnly: true
+
+            # Feast data만 덮어쓰기
+            - name: feast-data
+              mountPath: /app/feast_repo/data
