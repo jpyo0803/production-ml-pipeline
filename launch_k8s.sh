@@ -153,6 +153,10 @@ kubectl apply -f k8s/inference-deployment.yaml
 kubectl apply -f k8s/inference-service.yaml
 kubectl apply -f k8s/inference-hpa.yaml
 
+# 10초 대기
+echo "Waiting 10 seconds for Inference pods to be ready..."
+sleep 10
+
 echo "=============================="
 echo " Exposing Inference Service"
 echo "=============================="

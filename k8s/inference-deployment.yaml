@@ -27,3 +27,10 @@ spec:
               valueFrom: {secretKeyRef: {name: minio-credentials, key: AWS_DEFAULT_REGION}}
             - name: MLFLOW_S3_ENDPOINT_URL
               valueFrom: {secretKeyRef: {name: minio-credentials, key: MLFLOW_S3_ENDPOINT_URL}}
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
