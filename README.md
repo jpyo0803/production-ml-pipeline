@@ -68,6 +68,12 @@ curl -X POST http://127.0.0.1:xxxxx/predict/batch \
 ##### Prerequisite
 - Docker 설치 (Docker version 28.0.4)
 - Docker compose 설치 (Docker Compose version v2.34.0-desktop.1)
+- MinIO client 설치 
+```sh
+$ curl -O https://dl.min.io/client/mc/release/linux-amd64/mc
+$ chmod +x mc
+$ sudo mv mc /usr/local/bin/
+```
 
 ##### 실행방법
 ```sh
