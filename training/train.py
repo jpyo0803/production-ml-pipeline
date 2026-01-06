@@ -4,6 +4,7 @@ import torch
 
 from model import TabularModel
 from model_wrapper import CreditModelWrapper
+from model_wrapper_onnx import CreditModelWrapperOnnx
 
 from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import StandardScaler
@@ -12,12 +13,43 @@ import mlflow
 from mlflow.tracking import MlflowClient
 
 import os
+import boto3
 
 mlflow.set_tracking_uri(os.environ["MLFLOW_TRACKING_URI"])
 mlflow.set_experiment("home-credit-default")
 
 config = Config()
 device = config.device
+
+def export_onnx(model, scaler, input_dim, onnx_path):
+    model.eval()
+
+    dummy_input = torch.randn(1, input_dim)
+
+    torch.onnx.export(
+        model,
+        dummy_input,
+        onnx_path,
+        input_names=["input"],
+        output_names=["output"],
+        dynamic_axes={
+            "input": {0: "batch_size"},
+            "output": {0: "batch_size"},
+        },
+        opset_version=17
+    )
+
+
+def upload_to_minio(local_path, bucket, s3_key):
+    s3 = boto3.client(
+        "s3",
+        endpoint_url=os.environ["MLFLOW_S3_ENDPOINT_URL"],
+        aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
+        aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
+        region_name=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"),
+    )
+
+    s3.upload_file(local_path, bucket, s3_key)
 
 def train():
     X_train, y_train, X_val, y_val = load_dataset()
@@ -61,7 +93,7 @@ def train():
         )
 
         # 모델 저장 및 등록
-        result = mlflow.pyfunc.log_model(
+        mlflow.pyfunc.log_model(
             artifact_path="model",
             python_model=wrapped_model,
             registered_model_name="HomeCreditDefaultModel",
@@ -80,6 +112,28 @@ def train():
             name="HomeCreditDefaultModel",
             alias="prod",
             version=model_versions[0].version
+        )
+
+        print("Exporting model to ONNX format and uploading to MinIO...")
+        model_for_onnx = CreditModelWrapperOnnx(
+            model=model,
+            scaler=scaler,
+        )
+        model_for_onnx.eval()
+
+        onnx_path = "/tmp/model.onnx"
+
+        export_onnx(
+            model=model_for_onnx,
+            scaler=scaler,
+            input_dim=X_train.shape[1],
+            onnx_path=onnx_path,
+        )
+
+        upload_to_minio(
+            local_path=onnx_path,
+            bucket="models",
+            s3_key="home_credit_default/1/model.onnx",
         )
 
 if __name__ == "__main__":

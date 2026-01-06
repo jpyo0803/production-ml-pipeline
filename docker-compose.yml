@@ -42,6 +42,7 @@ services:
       mc alias set local http://minio:9000 minioadmin minioadmin123;
       mc mb -p local/mlflow || true;
       mc mb -p local/ml-data || true;
+      mc mb -p local/models || true;
       exit 0;
       "
     restart: "no"
@@ -108,7 +109,10 @@ services:
     build: ./inference
     container_name: inference
     ports:
-      - "8000:8000"
+      - "8080:8080" # FastAPI
+      - "8000:8000" # Triton HTTP
+      - "8001:8001" # Triton gRPC
+      - "8002:8002" # Triton Metrics
     depends_on:
       - mlflow
     environment:

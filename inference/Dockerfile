@@ -1,12 +1,14 @@
-FROM pytorch/pytorch
+FROM nvcr.io/nvidia/tritonserver:24.01-py3
 
 WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py .
+COPY . .
 
-EXPOSE 8000
+RUN chmod +x entrypoint.sh
 
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+EXPOSE 8000 8001 8002
+
+CMD ["bash", "entrypoint.sh"]
