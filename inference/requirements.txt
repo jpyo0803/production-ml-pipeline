@@ -1,8 +1,7 @@
 fastapi
 uvicorn
-mlflow-skinny
+mlflow
 pandas
-# torch
-# botocore
+torch
 boto3
 tritonclient[http]

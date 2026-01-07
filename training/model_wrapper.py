@@ -15,6 +15,5 @@ class CreditModelWrapper(mlflow.pyfunc.PythonModel):
         self.model.eval()
         with torch.no_grad():
             logits = self.model(X)
-            probs = torch.sigmoid(logits).cpu().numpy()
 
-        return probs
+        return logits.cpu().numpy()

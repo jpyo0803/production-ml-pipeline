@@ -6,7 +6,20 @@ from typing import List
 
 TRITON_URL = "http://localhost:8000/v2/models/home_credit_default/infer"
 
-app = FastAPI(title="Inference via Triton")
+app = FastAPI(title="Home Credit Default Inference API with Triton")
+
+FEATURE_ORDER = [
+    "AMT_INCOME_TOTAL",
+    "AMT_CREDIT",
+    "AMT_ANNUITY",
+    "DAYS_BIRTH",
+    "DAYS_EMPLOYED",
+    "bureau_credit_count",
+    "bureau_credit_active_count",
+    "bureau_credit_days_enddate_mean",
+    "bureau_amt_credit_sum",
+    "bureau_amt_credit_sum_overdue",
+]
 
 # Input schema
 class PredictionRequest(BaseModel):
@@ -21,6 +34,11 @@ class PredictionRequest(BaseModel):
     bureau_amt_credit_sum: float
     bureau_amt_credit_sum_overdue: float
 
+def to_tensor(reqs: List[PredictionRequest]) -> np.ndarray:
+    return np.array(
+        [[r.dict()[f] for f in FEATURE_ORDER] for r in reqs],
+        dtype=np.float32
+    )
 
 # Triton inference logic (공통)
 def triton_infer(inputs: np.ndarray):
@@ -49,10 +67,7 @@ def triton_infer(inputs: np.ndarray):
 # 단일 예측
 @app.post("/predict")
 def predict(req: PredictionRequest):
-    inputs = np.array(
-        [[*req.dict().values()]],
-        dtype=np.float32
-    )  # shape: (1, F)
+    inputs = to_tensor([req])  # shape: (1, F)
 
     probs = triton_infer(inputs)
 
@@ -64,10 +79,7 @@ def predict(req: PredictionRequest):
 # 배치 예측
 @app.post("/predict/batch")
 def predict_batch(reqs: List[PredictionRequest]):
-    inputs = np.array(
-        [[*r.dict().values()] for r in reqs],
-        dtype=np.float32
-    )  # shape: (B, F)
+    inputs = to_tensor(reqs)  # shape: (B, F)
 
     probs = triton_infer(inputs)
 

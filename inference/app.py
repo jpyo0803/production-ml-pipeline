@@ -18,10 +18,21 @@ print("[INFO] Model loaded successfully")
 
 app = FastAPI(title="Home Credit Default Inference API")
 
+FEATURE_ORDER = [
+    "AMT_INCOME_TOTAL",
+    "AMT_CREDIT",
+    "AMT_ANNUITY",
+    "DAYS_BIRTH",
+    "DAYS_EMPLOYED",
+    "bureau_credit_count",
+    "bureau_credit_active_count",
+    "bureau_credit_days_enddate_mean",
+    "bureau_amt_credit_sum",
+    "bureau_amt_credit_sum_overdue",
+]
 
-# 요청 스키마
+# Request schema
 class PredictionRequest(BaseModel):
-    # 학습에 사용한 feature와 동일해야 함
     AMT_INCOME_TOTAL: float
     AMT_CREDIT: float
     AMT_ANNUITY: float
@@ -33,10 +44,11 @@ class PredictionRequest(BaseModel):
     bureau_amt_credit_sum: float
     bureau_amt_credit_sum_overdue: float
 
-
-class BatchPredictionRequest(BaseModel):
-    instances: List[PredictionRequest]
-
+def to_dataframe(reqs: List[PredictionRequest]) -> pd.DataFrame:
+    return pd.DataFrame(
+        [{f: r.dict()[f] for f in FEATURE_ORDER} for r in reqs],
+        columns=FEATURE_ORDER,
+    )
 
 # 헬스체크
 @app.get("/health")
@@ -47,25 +59,29 @@ def health():
 # 단일 예측
 @app.post("/predict")
 def predict(req: PredictionRequest):
-    df = pd.DataFrame([req.dict()])
+    df = to_dataframe([req])   # shape: (1, F)
 
     logits = model.predict(df)
 
-    preds = 1 / (1 + np.exp(-logits))  # 시그모이드 함수 적용
+    probs = 1 / (1 + np.exp(-logits))
 
-    return {"prediction": float(preds[0])}
+    return {
+        "probability": float(probs[0])
+    }
 
 
 # 배치 예측
 @app.post("/predict/batch")
-def predict_batch(req: BatchPredictionRequest):
-    df = pd.DataFrame([x.dict() for x in req.instances])
+def predict_batch(reqs: List[PredictionRequest]):
+    df = to_dataframe(reqs)  # shape: (B, F)
 
     logits = model.predict(df)
 
-    preds = 1 / (1 + np.exp(-logits))  # 시그모이드 함수 적용
+    probs = 1 / (1 + np.exp(-logits))
 
-    if hasattr(preds, "values"):
-        preds = preds.values
+    if hasattr(probs, "values"):
+        probs = probs.values
 
-    return {"predictions": preds.tolist()}
+    return {
+        "probabilities": probs.tolist()
+    }
