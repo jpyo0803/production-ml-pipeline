@@ -4,6 +4,8 @@ pyarrow
 torch
 scikit-learn
 mlflow
+numpy
 boto3
 s3fs
 onnx
+onnxruntime

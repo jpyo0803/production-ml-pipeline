@@ -1,3 +1,4 @@
+from copy import deepcopy
 from datasets import load_dataset
 from config import Config
 import torch
@@ -24,7 +25,10 @@ device = config.device
 def export_onnx(model, scaler, input_dim, onnx_path):
     model.eval()
 
-    dummy_input = torch.randn(1, input_dim)
+    # canonical dummy input (raw space)
+    dummy_input = torch.zeros(
+        1, input_dim, dtype=torch.float32
+    )
 
     torch.onnx.export(
         model,
@@ -36,9 +40,8 @@ def export_onnx(model, scaler, input_dim, onnx_path):
             "input": {0: "batch_size"},
             "output": {0: "batch_size"},
         },
-        opset_version=17
+        opset_version=17,
     )
-
 
 def upload_to_minio(local_path, bucket, s3_key):
     s3 = boto3.client(
@@ -84,12 +87,15 @@ def train():
 
             print(f"Epoch {epoch+1}/{config.num_epochs}, Loss: {loss.item():.4f}, Val AUC: {auc:.4f}")
 
+        model.eval()
+        model_cpu = deepcopy(model).to("cpu").eval()
+
         mlflow.log_metric("val_auc", auc)
 
         wrapped_model = CreditModelWrapper(
-            model=model,
+            model=model_cpu,
             scaler=scaler,
-            device=device
+            device="cpu",
         )
 
         # 모델 저장 및 등록
@@ -116,10 +122,9 @@ def train():
 
         print("Exporting model to ONNX format and uploading to MinIO...")
         model_for_onnx = CreditModelWrapperOnnx(
-            model=model,
+            model=model_cpu,
             scaler=scaler,
-        )
-        model_for_onnx.eval()
+        ).eval()
 
         onnx_path = "/tmp/model.onnx"
 
@@ -135,6 +140,19 @@ def train():
             bucket="models",
             s3_key="home_credit_default/1/model.onnx",
         )
+
+        # MLflow와 ONNX 출력 차이 확인
+        x_raw = torch.randn(5, X_train.shape[1])
+
+        with torch.no_grad():
+            torch_out = model_for_onnx(x_raw)
+
+        import onnxruntime as ort
+        import numpy as np
+        sess = ort.InferenceSession("/tmp/model.onnx")
+        onnx_out = sess.run(None, {"input": x_raw.numpy()})[0]
+
+        print("max diff:", np.max(np.abs(torch_out.numpy() - onnx_out)))
 
 if __name__ == "__main__":
     train()
