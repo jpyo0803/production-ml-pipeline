@@ -6,7 +6,19 @@ spec:
   selector: {app: inference}
   type: NodePort
   ports:
-    - name: http
+    - name: fastapi
+      port: 8080
+      targetPort: 8080
+      nodePort: 30080
+    - name: triton-http
       port: 8000
       targetPort: 8000
-      nodePort: 30080
+      nodePort: 30000
+    - name: triton-grpc
+      port: 8001
+      targetPort: 8001
+      nodePort: 30001
+    - name: triton-metrics
+      port: 8002
+      targetPort: 8002
+      nodePort: 30002

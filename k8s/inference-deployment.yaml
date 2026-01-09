@@ -15,7 +15,10 @@ spec:
           image: inference:latest
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 8000
+            - containerPort: 8080 # FastAPI
+            - containerPort: 8000 # Triton HTTP
+            - containerPort: 8001 # Triton gRPC
+            - containerPort: 8002 # Triton Metrics
           env:
             - name: MLFLOW_TRACKING_URI
               value: http://mlflow:5000

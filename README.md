@@ -13,56 +13,53 @@ $ ./launch_k8s.sh
 ```
 
 ##### 추론 요청 예시
+단일 요청 (포트번호 xxxxx는 launch_k8s.sh에 실행 마지막에 표시됨)
 ```sh
-# 단일 요청 (포트번호 xxxxx는 launch_k8s.sh에 실행 마지막에 표시됨)
 curl -X POST http://127.0.0.1:xxxxx/predict \
--H "Content-Type: application/json" \
--d '{
-"SK_ID_CURR": 100001,
-"AMT_INCOME_TOTAL": 202500.0,
-"AMT_CREDIT": 406597.5,
-"AMT_ANNUITY": 24700.5,
-"DAYS_BIRTH": -9461,
-"DAYS_EMPLOYED": -637,
-"bureau_credit_count": 2,
-"bureau_credit_active_count": 1,
-"bureau_credit_days_enddate_mean": 365.0,
-"bureau_amt_credit_sum": 600000.0,
-"bureau_amt_credit_sum_overdue": 0.0
-}'
+  -H "Content-Type: application/json" \
+  -d '{
+    "AMT_INCOME_TOTAL": 50000,
+    "AMT_CREDIT": 200000,
+    "AMT_ANNUITY": 15000,
+    "DAYS_BIRTH": -12000,
+    "DAYS_EMPLOYED": -2000,
+    "bureau_credit_count": 3,
+    "bureau_credit_active_count": 1,
+    "bureau_credit_days_enddate_mean": -500,
+    "bureau_amt_credit_sum": 300000,
+    "bureau_amt_credit_sum_overdue": 0
+  }'
 ```
+배치 요청 (포트번호 xxxxx는 launch_k8s.sh에 실행 마지막에 표시됨)
 ```sh
-# 배치 요청 (포트번호 xxxxx는 launch_k8s.sh에 실행 마지막에 표시됨)
 curl -X POST http://127.0.0.1:xxxxx/predict/batch \
--H "Content-Type: application/json" \
--d '{
-"instances": [
-{
-"AMT_INCOME_TOTAL": 202500.0,
-"AMT_CREDIT": 406597.5,
-"AMT_ANNUITY": 24700.5,
-"DAYS_BIRTH": -9461,
-"DAYS_EMPLOYED": -637,
-"bureau_credit_count": 2,
-"bureau_credit_active_count": 1,
-"bureau_credit_days_enddate_mean": 365.0,
-"bureau_amt_credit_sum": 600000.0,
-"bureau_amt_credit_sum_overdue": 0.0
-},
-{
-"AMT_INCOME_TOTAL": 135000.0,
-"AMT_CREDIT": 250000.0,
-"AMT_ANNUITY": 18000.0,
-"DAYS_BIRTH": -16000,
-"DAYS_EMPLOYED": -4000,
-"bureau_credit_count": 1,
-"bureau_credit_active_count": 1,
-"bureau_credit_days_enddate_mean": -1200.0,
-"bureau_amt_credit_sum": 300000.0,
-"bureau_amt_credit_sum_overdue": 0.0
-}
-]
-}'
+  -H "Content-Type: application/json" \
+  -d '[
+    {
+      "AMT_INCOME_TOTAL": 50000,
+      "AMT_CREDIT": 200000,
+      "AMT_ANNUITY": 15000,
+      "DAYS_BIRTH": -12000,
+      "DAYS_EMPLOYED": -2000,
+      "bureau_credit_count": 3,
+      "bureau_credit_active_count": 1,
+      "bureau_credit_days_enddate_mean": -500,
+      "bureau_amt_credit_sum": 300000,
+      "bureau_amt_credit_sum_overdue": 0
+    },
+    {
+      "AMT_INCOME_TOTAL": 80000,
+      "AMT_CREDIT": 300000,
+      "AMT_ANNUITY": 20000,
+      "DAYS_BIRTH": -14000,
+      "DAYS_EMPLOYED": -4000,
+      "bureau_credit_count": 5,
+      "bureau_credit_active_count": 2,
+      "bureau_credit_days_enddate_mean": -800,
+      "bureau_amt_credit_sum": 500000,
+      "bureau_amt_credit_sum_overdue": 1000
+    }
+  ]'
 ```
 #### Docker compose 사용시
 ##### Prerequisite
@@ -85,8 +82,8 @@ $ docker compose up inference
 ```
 
 ##### 추론 요청 예시
+단일 요청 
 ```sh
-# 단일 요청 
 curl -X POST http://localhost:8080/predict \
   -H "Content-Type: application/json" \
   -d '{
@@ -102,8 +99,8 @@ curl -X POST http://localhost:8080/predict \
     "bureau_amt_credit_sum_overdue": 0
   }'
 ```
+배치 요청 
 ```sh
-# 배치 요청 
 curl -X POST http://localhost:8080/predict/batch \
   -H "Content-Type: application/json" \
   -d '[

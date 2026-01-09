@@ -4,82 +4,79 @@ set -euo pipefail
 NAMESPACE="production-ml-pipeline"
 
 echo "=============================="
-echo " Starting Minikube"
+echo " 1. Starting Minikube"
 echo "=============================="
-minikube start
+# 메모리와 CPU를 넉넉하게 할당 (ML 워크로드 최적화)
+minikube start --memory=8192 --cpus=4
+
+# 로컬 Docker 대신 Minikube 내부 Docker 데몬 사용
+echo "Configuring shell to use minikube Docker daemon..."
+eval $(minikube docker-env)
 
 echo "Enabling metrics-server addon..."
 minikube addons enable metrics-server
 
 echo "=============================="
-echo " Creating namespace"
+echo " 2. Creating Namespace & Context"
 echo "=============================="
 kubectl apply -f k8s/namespace.yaml
 kubectl config set-context --current --namespace="${NAMESPACE}"
 
-kubectl get ns
-kubectl config view --minify | grep namespace || true
+echo "Current Namespace:"
+kubectl get ns | grep "${NAMESPACE}"
 
 echo "=============================="
-echo " Building & loading Docker images"
+echo " 3. Building Docker Images (Inside Minikube)"
 echo "=============================="
-
-build_and_load() {
+# 별도의 load 과정 없이 바로 내부 데몬에서 빌드합니다.
+build_image() {
   local name=$1
   local dir=$2
-
-  echo "Building image: ${name}"
-  (cd "${dir}" && docker build --no-cache -t "${name}:latest" .)
-
-  echo "Loading image into minikube: ${name}"
-  minikube image load "${name}:latest"
+  echo "Building image: ${name}..."
+  (cd "${dir}" && docker build -t "${name}:latest" .)
 }
 
-build_and_load mlflow-custom mlflow
-build_and_load training training
-build_and_load inference inference
-build_and_load feature-store feature_store
+build_image mlflow-custom mlflow
+build_image training training
+build_image inference inference
+build_image feature-store feature_store
 
-echo "Loaded images:"
-minikube image list | grep -E "mlflow|training|inference|feature-store" || true
+echo "Built images in Minikube:"
+docker images | grep -E "mlflow|training|inference|feature-store"
 
 echo "=============================="
-echo " Deploying Postgres"
+echo " 4. Deploying Infrastructure (DB & Storage)"
 echo "=============================="
+# Postgres 배포
 kubectl apply -f k8s/postgres-pvc.yaml
 kubectl apply -f k8s/postgres-deployment.yaml
 kubectl apply -f k8s/postgres-service.yaml
 
-echo "=============================="
-echo " Deploying MinIO"
-echo "=============================="
+# MinIO 배포
 kubectl apply -f k8s/minio-pvc.yaml
 kubectl apply -f k8s/minio-deployment.yaml
 kubectl apply -f k8s/minio-service.yaml
 
-echo "=============================="
-echo " Initializing MinIO buckets"
-echo "=============================="
+echo "Waiting for MinIO to be ready..."
+kubectl wait --for=condition=available deployment/minio --timeout=300s
+
+# MinIO 버킷 초기화 Job
 kubectl apply -f k8s/minio-init-job.yaml
 kubectl wait --for=condition=complete job/minio-init --timeout=600s
 
 echo "=============================="
-echo "Uploading raw CSVs to MinIO..."
+echo " 5. Uploading Raw Data to MinIO"
 echo "=============================="
-
-kubectl run minio-uploader \
-  --image=alpine:3.19 \
-  --restart=Never \
-  --command -- sleep 3600
-
+# 임시 업로더 포드 생성
+kubectl run minio-uploader --image=alpine:3.19 --restart=Never --command -- sleep 3600
 kubectl wait --for=condition=Ready pod/minio-uploader --timeout=600s
 
-# CSV 복사 (tar 문제 없음)
+# 로컬 데이터를 포드로 복사
 kubectl cp ./data/application_train.csv minio-uploader:/application_train.csv
 kubectl cp ./data/application_test.csv  minio-uploader:/application_test.csv
 kubectl cp ./data/bureau.csv            minio-uploader:/bureau.csv
 
-# mc 설치 + 업로드
+# 포드 내부에서 mc(MinIO Client) 설치 및 데이터 업로드
 kubectl exec minio-uploader -- sh -c "
 apk add --no-cache curl &&
 curl -Lo /usr/local/bin/mc https://dl.min.io/client/mc/release/linux-amd64/mc &&
@@ -93,75 +90,53 @@ mc cp /bureau.csv            local/ml-data/raw/ &&
 mc ls local/ml-data/raw
 "
 
-kubectl delete pod minio-uploader
+kubectl delete pod minio-uploader --now
 
 echo "=============================="
-echo "Creating MinIO & Postgres credentials secret..."
+echo " 6. Creating Secrets"
 echo "=============================="
-
-kubectl delete secret minio-credentials -n production-ml-pipeline --ignore-not-found
+kubectl delete secret minio-credentials postgres-credentials --ignore-not-found
 
 kubectl create secret generic minio-credentials \
   --from-literal=AWS_ACCESS_KEY_ID=minioadmin \
   --from-literal=AWS_SECRET_ACCESS_KEY=minioadmin123 \
   --from-literal=AWS_DEFAULT_REGION=us-east-1 \
   --from-literal=AWS_ENDPOINT_URL=http://minio:9000 \
-  --from-literal=MLFLOW_S3_ENDPOINT_URL=http://minio:9000 \
-  -n production-ml-pipeline
-
-kubectl delete secret postgres-credentials -n production-ml-pipeline --ignore-not-found
+  --from-literal=MLFLOW_S3_ENDPOINT_URL=http://minio:9000
 
 kubectl create secret generic postgres-credentials \
   --from-literal=POSTGRES_DB=mlflow \
   --from-literal=POSTGRES_USER=mlflow \
-  --from-literal=POSTGRES_PASSWORD=mlflow \
-  -n production-ml-pipeline
+  --from-literal=POSTGRES_PASSWORD=mlflow
 
 echo "=============================="
-echo " Deploying MLflow"
+echo " 7. Deploying MLflow & Feature Store"
 echo "=============================="
 kubectl apply -f k8s/mlflow-deployment.yaml
 kubectl apply -f k8s/mlflow-service.yaml
 
-echo "=============================="
-echo " Running Feature Store (ETL + Feast apply)"
-echo "=============================="
-
-
 echo "Creating Feast repo ConfigMap..."
-kubectl delete configmap feast-repo -n "${NAMESPACE}" --ignore-not-found
-kubectl create configmap feast-repo \
-  --from-file=feature_store/feast_repo \
-  -n "${NAMESPACE}"
+kubectl delete configmap feast-repo --ignore-not-found
+kubectl create configmap feast-repo --from-file=feature_store/feast_repo
 
 kubectl apply -f k8s/feast-registry-pvc.yaml
 kubectl apply -f k8s/feature-store-job.yaml
 kubectl wait --for=condition=complete job/feature-store --timeout=600s
-kubectl logs job/feature-store
 
 echo "=============================="
-echo " Running Training Job"
+echo " 8. Running Training & Inference"
 echo "=============================="
 kubectl apply -f k8s/training-job.yaml
 kubectl wait --for=condition=complete job/training --timeout=1200s
-kubectl logs job/training
 
-echo "=============================="
-echo " Deploying Inference Service"
-echo "=============================="
 kubectl apply -f k8s/inference-deployment.yaml
 kubectl apply -f k8s/inference-service.yaml
 kubectl apply -f k8s/inference-hpa.yaml
 
-# 10초 대기
-echo "Waiting 10 seconds for Inference pods to be ready..."
-sleep 10
+echo "Waiting 15 seconds for Inference pods to stabilize..."
+sleep 15
 
 echo "=============================="
-echo " Exposing Inference Service"
+echo " ALL DONE - Service Access"
 echo "=============================="
 minikube service inference -n "${NAMESPACE}"
-
-echo "=============================="
-echo " ALL DONE"
-echo "=============================="
