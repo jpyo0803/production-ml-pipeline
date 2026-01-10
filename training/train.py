@@ -22,6 +22,18 @@ mlflow.set_experiment("home-credit-default")
 config = Config()
 device = config.device
 
+# 시드 고정
+import random
+import numpy as np
+
+seed = 42
+random.seed(seed)
+np.random.seed(seed)
+torch.manual_seed(seed)
+torch.cuda.manual_seed_all(seed)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+
 def export_onnx(model, scaler, input_dim, onnx_path):
     model.eval()
 
