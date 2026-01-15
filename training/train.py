@@ -115,7 +115,7 @@ def train():
             artifact_path="model",
             python_model=wrapped_model,
             registered_model_name="HomeCreditDefaultModel",
-            code_paths=["model.py", "model_wrapper.py"],
+            code_path=["model.py", "model_wrapper.py"],
         )
 
         client = MlflowClient()

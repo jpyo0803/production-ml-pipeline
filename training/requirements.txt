@@ -2,7 +2,7 @@ feast==0.40.1
 pandas
 pyarrow
 scikit-learn
-mlflow
+mlflow==v2.9.2
 numpy
 boto3
 s3fs

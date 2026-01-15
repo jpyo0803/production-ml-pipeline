@@ -71,6 +71,7 @@ services:
       - postgres
       - minio-init
     environment:
+      # MLflow는 클라이언트들을 대신해 MinIO에 접속하므로 MinIO 접속 정보 필요
       AWS_ACCESS_KEY_ID: minioadmin
       AWS_SECRET_ACCESS_KEY: minioadmin123
       AWS_DEFAULT_REGION: us-east-1
@@ -82,7 +83,6 @@ services:
       --backend-store-uri postgresql://mlflow:mlflow@postgres:5432/mlflow
       --default-artifact-root s3://mlflow
       --serve-artifacts
-      --allowed-hosts '*'
 
   training:
     build: ./training
