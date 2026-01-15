@@ -8,7 +8,7 @@ import pandas as pd
 import s3fs
 
 RAW_S3_PREFIX = os.environ.get("RAW_S3_PREFIX", "s3://ml-data/raw")
-OUT_S3_PREFIX = os.environ.get("OUT_S3_PREFIX", "s3://ml-data/processed")
+PROCESSED_S3_PREFIX = os.environ.get("PROCESSED_S3_PREFIX", "s3://ml-data/processed")
 
 AWS_KEY = os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin")
 AWS_SECRET = os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin123")
@@ -39,7 +39,7 @@ def main():
     agg["event_timestamp"] = pd.Timestamp("2018-01-01")
 
     # MinIO(S3)에 저장
-    out_uri = f"{OUT_S3_PREFIX}/bureau_agg.parquet"
+    out_uri = f"{PROCESSED_S3_PREFIX}/bureau_agg.parquet"
     agg.to_parquet(out_uri, index=False, storage_options=s3_opts())
     print(f"[OK] wrote {out_uri}")
 

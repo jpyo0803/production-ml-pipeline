@@ -5,13 +5,12 @@ services:
     build: ./feature_store
     depends_on:
       minio-init:
-        condition: service_completed_successfully
+        condition: service_completed_successfully # MinIO 초기화 완료 후 시작
     volumes:
       - ./feature_store/feast_repo:/app/feast_repo
     environment:
-      # MinIO(S3)에서 raw 읽고 processed/feast에 씀
-      RAW_S3_PREFIX: s3://ml-data/raw
-      OUT_S3_PREFIX: s3://ml-data/processed
+      RAW_S3_PREFIX: s3://ml-data/raw # 원시 데이터 위치
+      PROCESSED_S3_PREFIX: s3://ml-data/processed # 전처리된 데이터 위치
       FEAST_REGISTRY_S3: s3://ml-data/feast/registry.db
 
       AWS_ACCESS_KEY_ID: minioadmin
@@ -19,25 +18,26 @@ services:
       AWS_DEFAULT_REGION: us-east-1
       AWS_ENDPOINT_URL: http://minio:9000
 
+  # MinIO (S3 호환 오브젝트 스토리지)
   minio:
     image: minio/minio:latest
     container_name: minio
-    command: server /data --console-address ":9001"
+    command: server /data --console-address ":9001" # 콘솔 UI 활성화
     ports:
-      - "9000:9000"   # S3 API
-      - "9001:9001"   # MinIO Console
+      - "9000:9000" # S3 API 통신용(SDK, CLI 등이 접근하는 포트)
+      - "9001:9001" # 브라우저 접속용 콘솔 UI 포트
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin123
+      MINIO_ROOT_USER: minioadmin # 관리자 로그인 아이디 (편의상 기본값 사본)
+      MINIO_ROOT_PASSWORD: minioadmin123 # 관리자 로그인 비밀번호 (편의상 기본값 사본)
     volumes:
-      - minio_data:/data
+      - minio_data:/data # 컨테이너가 종료되어도 데이터가 유지되도록 볼륨 마운트
 
-  # MinIO에 버킷 생성 (1회성)
+  # MinIO 서버가 시작된 후에 버킷을 생성하는 1회성 초기화 작업
   minio-init:
     image: minio/mc:latest
     depends_on:
-      - minio
-    entrypoint: >
+      - minio # MinIO가 먼저 시작되어야 함
+    entrypoint: > # mc 명령어로 MinIO에 접속하여 버킷 생성
       /bin/sh -c "
       mc alias set local http://minio:9000 minioadmin minioadmin123;
       mc mb -p local/mlflow || true;

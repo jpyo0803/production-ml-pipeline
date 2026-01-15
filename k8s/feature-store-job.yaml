@@ -21,7 +21,7 @@ spec:
           env:
             - name: RAW_S3_PREFIX
               value: s3://ml-data/raw
-            - name: OUT_S3_PREFIX
+            - name: PROCESSED_S3_PREFIX
               value: s3://ml-data/processed
 
             - name: AWS_ACCESS_KEY_ID
