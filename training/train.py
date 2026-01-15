@@ -1,11 +1,9 @@
-from copy import deepcopy
 from datasets import load_dataset
 from config import Config
 import torch
 
 from model import TabularModel
 from model_wrapper import CreditModelWrapper
-from model_wrapper_onnx import CreditModelWrapperOnnx
 
 from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import StandardScaler
@@ -14,7 +12,9 @@ import mlflow
 from mlflow.tracking import MlflowClient
 
 import os
-import boto3
+
+import onnx
+import onnxruntime as ort
 
 mlflow.set_tracking_uri(os.environ["MLFLOW_TRACKING_URI"])
 mlflow.set_experiment("home-credit-default")
@@ -34,7 +34,47 @@ torch.cuda.manual_seed_all(seed)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-def export_onnx(model, scaler, input_dim, onnx_path):
+
+def log_triton_config(model_name, input_dim, artifact_path):    
+    config_content = f"""name: "{model_name}"
+platform: "onnxruntime_onnx"
+max_batch_size: 0
+
+input [
+  {{
+    name: "input"
+    data_type: TYPE_FP32
+    dims: [ -1, {input_dim} ]
+  }}
+]
+
+output [
+  {{
+    name: "output"
+    data_type: TYPE_FP32
+    dims: [ -1 ]
+  }}
+]
+
+instance_group [
+  {{
+    kind: KIND_CPU
+    count: 1
+  }}
+]
+
+dynamic_batching {{ }}
+"""
+    config_file_path = "config.pbtxt"
+    with open(config_file_path, "w") as f:
+        f.write(config_content)
+
+    mlflow.log_artifact(config_file_path, artifact_path=artifact_path)
+
+def convert_to_onnx_model(model, scaler, input_dim):
+    import io
+    buffer = io.BytesIO()
+
     model.eval()
 
     # canonical dummy input (raw space)
@@ -45,7 +85,7 @@ def export_onnx(model, scaler, input_dim, onnx_path):
     torch.onnx.export(
         model,
         dummy_input,
-        onnx_path,
+        buffer,
         input_names=["input"],
         output_names=["output"],
         dynamic_axes={
@@ -55,16 +95,8 @@ def export_onnx(model, scaler, input_dim, onnx_path):
         opset_version=17,
     )
 
-def upload_to_minio(local_path, bucket, s3_key):
-    s3 = boto3.client(
-        "s3",
-        endpoint_url=os.environ["MLFLOW_S3_ENDPOINT_URL"],
-        aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
-        aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
-        region_name=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"),
-    )
-
-    s3.upload_file(local_path, bucket, s3_key)
+    onnx_model = onnx.load_from_string(buffer.getvalue())
+    return onnx_model
 
 def train():
     X_train, y_train, X_val, y_val = load_dataset()
@@ -99,72 +131,47 @@ def train():
 
             print(f"Epoch {epoch+1}/{config.num_epochs}, Loss: {loss.item():.4f}, Val AUC: {auc:.4f}")
 
-        model.eval()
-        model_cpu = deepcopy(model).to("cpu").eval()
-
+        # Metric 로그
         mlflow.log_metric("val_auc", auc)
 
-        wrapped_model = CreditModelWrapper(
-            model=model_cpu,
+        model = model.to("cpu")
+
+        # ONNX로 변환 
+        onnx_model = convert_to_onnx_model(
+            model=CreditModelWrapper(model, scaler).eval(),
             scaler=scaler,
-            device="cpu",
+            input_dim=X_train.shape[1],
         )
 
-        # 모델 저장 및 등록
-        mlflow.pyfunc.log_model(
-            artifact_path="model",
-            python_model=wrapped_model,
+        artifact_path = "triton_model"
+
+        # MLflow에 ONNX 모델로 저장
+        mlflow.onnx.log_model(
+            onnx_model=onnx_model,
+            artifact_path=artifact_path,
             registered_model_name="HomeCreditDefaultModel",
-            code_path=["model.py", "model_wrapper.py"],
+        )
+
+        # Triton용 설정 파일 생성 및 저장
+        log_triton_config(
+            model_name="HomeCreditDefaultModel",
+            input_dim=X_train.shape[1],
+            artifact_path=artifact_path,
         )
 
         client = MlflowClient()
-
-        model_versions = client.search_model_versions(
-            filter_string="name='HomeCreditDefaultModel'",
-            order_by=["creation_timestamp DESC"],
-            max_results=1
-        )
+        model_version = client.get_latest_versions(
+            name="HomeCreditDefaultModel",
+            stages=["None"],
+        )[0].version
 
         client.set_registered_model_alias(
             name="HomeCreditDefaultModel",
             alias="prod",
-            version=model_versions[0].version
+            version=model_version,
         )
 
-        print("Exporting model to ONNX format and uploading to MinIO...")
-        model_for_onnx = CreditModelWrapperOnnx(
-            model=model_cpu,
-            scaler=scaler,
-        ).eval()
-
-        onnx_path = "/tmp/model.onnx"
-
-        export_onnx(
-            model=model_for_onnx,
-            scaler=scaler,
-            input_dim=X_train.shape[1],
-            onnx_path=onnx_path,
-        )
-
-        upload_to_minio(
-            local_path=onnx_path,
-            bucket="models",
-            s3_key="home_credit_default/1/model.onnx",
-        )
-
-        # MLflow와 ONNX 출력 차이 확인
-        x_raw = torch.randn(5, X_train.shape[1])
-
-        with torch.no_grad():
-            torch_out = model_for_onnx(x_raw)
-
-        import onnxruntime as ort
-        import numpy as np
-        sess = ort.InferenceSession("/tmp/model.onnx")
-        onnx_out = sess.run(None, {"input": x_raw.numpy()})[0]
-
-        print("max diff:", np.max(np.abs(torch_out.numpy() - onnx_out)))
+        print(f"[MLflow] logged model version: {model_version}")
 
 if __name__ == "__main__":
     train()

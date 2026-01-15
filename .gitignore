@@ -4,3 +4,5 @@
 **/__pycache__/
 mlruns/
 **/artifacts/
+**/*.onnx
+**/*.pbtxt

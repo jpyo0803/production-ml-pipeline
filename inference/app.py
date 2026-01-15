@@ -1,22 +1,12 @@
-import os
-import pandas as pd
-import mlflow.pyfunc
+import requests
+import numpy as np
 from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import List
-import numpy as np
 
-# MLflow 설정
-MLFLOW_TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://mlflow:5000")
-MODEL_URI = "models:/HomeCreditDefaultModel@prod"
+TRITON_URL = "http://localhost:8000/v2/models/HomeCreditDefaultModel/infer"
 
-mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-
-print("[INFO] Loading model from MLflow:", MODEL_URI)
-model = mlflow.pyfunc.load_model(MODEL_URI)
-print("[INFO] Model loaded successfully")
-
-app = FastAPI(title="Home Credit Default Inference API")
+app = FastAPI(title="Home Credit Default Inference API with Triton")
 
 FEATURE_ORDER = [
     "AMT_INCOME_TOTAL",
@@ -31,7 +21,7 @@ FEATURE_ORDER = [
     "bureau_amt_credit_sum_overdue",
 ]
 
-# Request schema
+# Input schema
 class PredictionRequest(BaseModel):
     AMT_INCOME_TOTAL: float
     AMT_CREDIT: float
@@ -44,44 +34,55 @@ class PredictionRequest(BaseModel):
     bureau_amt_credit_sum: float
     bureau_amt_credit_sum_overdue: float
 
-def to_dataframe(reqs: List[PredictionRequest]) -> pd.DataFrame:
-    return pd.DataFrame(
-        [{f: r.dict()[f] for f in FEATURE_ORDER} for r in reqs],
-        columns=FEATURE_ORDER,
+def to_tensor(reqs: List[PredictionRequest]) -> np.ndarray:
+    return np.array(
+        [[r.dict()[f] for f in FEATURE_ORDER] for r in reqs],
+        dtype=np.float32
     )
 
-# 헬스체크
-@app.get("/health")
-def health():
-    return {"status": "ok"}
+# Triton inference logic (공통)
+def triton_infer(inputs: np.ndarray):
+    payload = {
+        "inputs": [
+            {
+                "name": "input",
+                "shape": inputs.shape,   # (B, F)
+                "datatype": "FP32",
+                "data": inputs.tolist(),
+            }
+        ]
+    }
+
+    res = requests.post(TRITON_URL, json=payload)
+    res.raise_for_status()
+
+    outputs = res.json()["outputs"][0]["data"]
+
+    # sigmoid (binary classification 가정)
+    probs = [1 / (1 + np.exp(-x)) for x in outputs]
+
+    return probs
 
 
 # 단일 예측
 @app.post("/predict")
 def predict(req: PredictionRequest):
-    df = to_dataframe([req])   # shape: (1, F)
+    inputs = to_tensor([req])  # shape: (1, F)
 
-    logits = model.predict(df)
-
-    probs = 1 / (1 + np.exp(-logits))
+    probs = triton_infer(inputs)
 
     return {
-        "probability": float(probs[0])
+        "probability": probs[0]
     }
 
 
 # 배치 예측
 @app.post("/predict/batch")
 def predict_batch(reqs: List[PredictionRequest]):
-    df = to_dataframe(reqs)  # shape: (B, F)
+    inputs = to_tensor(reqs)  # shape: (B, F)
 
-    logits = model.predict(df)
-
-    probs = 1 / (1 + np.exp(-logits))
-
-    if hasattr(probs, "values"):
-        probs = probs.values
+    probs = triton_infer(inputs)
 
     return {
-        "probabilities": probs.tolist()
+        "probabilities": probs
     }

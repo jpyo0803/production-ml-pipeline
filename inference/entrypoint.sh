@@ -1,15 +1,15 @@
 #!/bin/bash
 set -e
 
-echo "===== [1] Export model from MLflow to ONNX ====="
-python3 download_onnx_model.py
+echo "===== Downloading model from MLflow ====="
+python3 download_from_mlflow.py
 
-echo "===== [3] Start Triton Inference Server ====="
+echo "===== Start Triton Inference Server ====="
 tritonserver \
   --model-repository=/models \
   --http-port=8000 \
   --metrics-port=8002 \
   --log-verbose=0 &
 
-echo "===== [4] Start FastAPI ====="
-uvicorn app_with_triton:app --host 0.0.0.0 --port 8080
+echo "===== Start FastAPI ====="
+uvicorn app:app --host 0.0.0.0 --port 8080
