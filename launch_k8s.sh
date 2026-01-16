@@ -4,20 +4,7 @@ set -euo pipefail
 NAMESPACE="production-ml-pipeline"
 
 echo "=============================="
-echo " 1. Starting Minikube"
-echo "=============================="
-# 메모리와 CPU를 넉넉하게 할당 (ML 워크로드 최적화)
-minikube start --memory=8192 --cpus=4
-
-# 로컬 Docker 대신 Minikube 내부 Docker 데몬 사용
-echo "Configuring shell to use minikube Docker daemon..."
-eval $(minikube docker-env)
-
-echo "Enabling metrics-server addon..."
-minikube addons enable metrics-server
-
-echo "=============================="
-echo " 2. Creating Namespace & Context"
+echo " Creating Namespace & Context"
 echo "=============================="
 kubectl apply -f k8s/namespace.yaml
 kubectl config set-context --current --namespace="${NAMESPACE}"
@@ -26,27 +13,16 @@ echo "Current Namespace:"
 kubectl get ns | grep "${NAMESPACE}"
 
 echo "=============================="
-echo " 3. Building Docker Images (Inside Minikube)"
+echo " Deploying Infrastructure (DB & Storage)"
 echo "=============================="
-# 별도의 load 과정 없이 바로 내부 데몬에서 빌드합니다.
-build_image() {
-  local name=$1
-  local dir=$2
-  echo "Building image: ${name}..."
-  (cd "${dir}" && docker build -t "${name}:latest" .)
-}
 
-build_image mlflow-custom mlflow
-build_image training training
-build_image inference inference
-build_image feature-store feature_store
+# Provisioner 설치
+kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
+kubectl patch storageclass local-path -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
 
-echo "Built images in Minikube:"
-docker images | grep -E "mlflow|training|inference|feature-store"
+# 마스터 노드의 Taint를 제거하여 모든 포드 배포를 허용
+kubectl taint nodes --all node-role.kubernetes.io/control-plane- || true
 
-echo "=============================="
-echo " 4. Deploying Infrastructure (DB & Storage)"
-echo "=============================="
 # Postgres 배포
 kubectl apply -f k8s/postgres-pvc.yaml
 kubectl apply -f k8s/postgres-deployment.yaml
@@ -65,7 +41,7 @@ kubectl apply -f k8s/minio-init-job.yaml
 kubectl wait --for=condition=complete job/minio-init --timeout=600s
 
 echo "=============================="
-echo " 5. Uploading Raw Data to MinIO"
+echo " Uploading Raw Data to MinIO"
 echo "=============================="
 # 임시 업로더 포드 생성
 kubectl run minio-uploader --image=alpine:3.19 --restart=Never --command -- sleep 3600
@@ -84,6 +60,7 @@ chmod +x /usr/local/bin/mc &&
 mc alias set local http://minio:9000 minioadmin minioadmin123 &&
 mc mb local/ml-data || true &&
 mc mb local/ml-data/raw || true &&
+mc mb local/ml-data/processed || true &&
 mc cp /application_train.csv local/ml-data/raw/ &&
 mc cp /application_test.csv  local/ml-data/raw/ &&
 mc cp /bureau.csv            local/ml-data/raw/ &&
@@ -93,7 +70,7 @@ mc ls local/ml-data/raw
 kubectl delete pod minio-uploader --now
 
 echo "=============================="
-echo " 6. Creating Secrets"
+echo " Creating Secrets"
 echo "=============================="
 kubectl delete secret minio-credentials postgres-credentials --ignore-not-found
 
@@ -110,7 +87,7 @@ kubectl create secret generic postgres-credentials \
   --from-literal=POSTGRES_PASSWORD=mlflow
 
 echo "=============================="
-echo " 7. Deploying MLflow & Feature Store"
+echo " Deploying MLflow & Feature Store"
 echo "=============================="
 kubectl apply -f k8s/mlflow-deployment.yaml
 kubectl apply -f k8s/mlflow-service.yaml
@@ -124,10 +101,20 @@ kubectl apply -f k8s/feature-store-job.yaml
 kubectl wait --for=condition=complete job/feature-store --timeout=600s
 
 echo "=============================="
-echo " 8. Running Training & Inference"
+echo " Running Training"
 echo "=============================="
 kubectl apply -f k8s/training-job.yaml
 kubectl wait --for=condition=complete job/training --timeout=1200s
+
+echo "=============================="
+echo " Deploying Triton"
+echo "=============================="
+kubectl apply -f k8s/triton-deployment.yaml
+kubectl apply -f k8s/triton-service.yaml
+
+echo "=============================="
+echo " Deploying Inference Service"
+echo "=============================="
 
 kubectl apply -f k8s/inference-deployment.yaml
 kubectl apply -f k8s/inference-service.yaml
@@ -139,4 +126,7 @@ sleep 15
 echo "=============================="
 echo " ALL DONE - Service Access"
 echo "=============================="
-minikube service inference -n "${NAMESPACE}"
+
+NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+PORT=$(kubectl get svc inference -o jsonpath='{.spec.ports[0].nodePort}')
+echo "Inference Service is available at: http://${NODE_IP}:${PORT}"

@@ -12,24 +12,17 @@ spec:
     spec:
       containers:
         - name: inference
-          image: inference:latest
+          image: jpyo0803/inference:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080 # FastAPI
-            - containerPort: 8000 # Triton HTTP
-            - containerPort: 8001 # Triton gRPC
-            - containerPort: 8002 # Triton Metrics
           env:
-            - name: MLFLOW_TRACKING_URI
-              value: http://mlflow:5000
-            - name: AWS_ACCESS_KEY_ID
-              valueFrom: {secretKeyRef: {name: minio-credentials, key: AWS_ACCESS_KEY_ID}}
-            - name: AWS_SECRET_ACCESS_KEY
-              valueFrom: {secretKeyRef: {name: minio-credentials, key: AWS_SECRET_ACCESS_KEY}}
-            - name: AWS_DEFAULT_REGION
-              valueFrom: {secretKeyRef: {name: minio-credentials, key: AWS_DEFAULT_REGION}}
-            - name: MLFLOW_S3_ENDPOINT_URL
-              valueFrom: {secretKeyRef: {name: minio-credentials, key: MLFLOW_S3_ENDPOINT_URL}}
+            - name: TRITON_HOST
+              value: "triton"
+            - name: TRITON_PORT
+              value: "8000"
+            - name: MODEL_NAME
+              value: "HomeCreditDefaultModel"
           resources:
             requests:
               cpu: "200m"

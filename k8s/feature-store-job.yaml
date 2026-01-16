@@ -15,7 +15,7 @@ spec:
 
       containers:
         - name: feature-store
-          image: feature-store:latest
+          image: jpyo0803/feature-store:latest
           imagePullPolicy: IfNotPresent
 
           env:

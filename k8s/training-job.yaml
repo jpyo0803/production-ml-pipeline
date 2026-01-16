@@ -21,7 +21,7 @@ spec:
 
       containers:
         - name: training
-          image: training:latest
+          image: jpyo0803/training:latest
           imagePullPolicy: IfNotPresent
 
           env:

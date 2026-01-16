@@ -12,7 +12,7 @@ spec:
     spec:
       containers:
         - name: mlflow
-          image: mlflow-custom:latest
+          image: jpyo0803/mlflow-custom:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 5000
@@ -37,5 +37,3 @@ spec:
             - --default-artifact-root
             - s3://mlflow
             - --serve-artifacts
-            - --allowed-hosts
-            - "*"
