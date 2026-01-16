@@ -105,22 +105,34 @@ services:
       - ./training:/app
       - ./feature_store/feast_repo:/app/feast_repo
 
-  inference:
-    build: ./inference
-    container_name: inference
+  triton:
+    build: ./triton
+    container_name: triton
     ports:
-      - "8080:8080" # FastAPI
       - "8000:8000" # Triton HTTP
       - "8001:8001" # Triton gRPC
       - "8002:8002" # Triton Metrics
     depends_on:
       - mlflow
+      - training
     environment:
       MLFLOW_TRACKING_URI: http://mlflow:5000
       AWS_ACCESS_KEY_ID: minioadmin
       AWS_SECRET_ACCESS_KEY: minioadmin123
       AWS_DEFAULT_REGION: us-east-1
       MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      
+  inference:
+    build: ./inference
+    container_name: inference
+    ports:
+      - "8080:8080" # FastAPI
+    depends_on:
+      - mlflow
+    environment:
+      TRITON_HOST: triton
+      TRITON_PORT: "8000"
+      MODEL_NAME: HomeCreditDefaultModel
 
 volumes:
   minio_data:

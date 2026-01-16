@@ -4,7 +4,13 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import List
 
-TRITON_URL = "http://localhost:8000/v2/models/HomeCreditDefaultModel/infer"
+import os
+
+TRITON_HOST = os.getenv("TRITON_HOST", "localhost")
+TRITON_PORT = os.getenv("TRITON_PORT", "8000")
+MODEL_NAME = os.getenv("MODEL_NAME", "HomeCreditDefaultModel")
+
+TRITON_URL = f"http://{TRITON_HOST}:{TRITON_PORT}/v2/models/{MODEL_NAME}/infer"
 
 app = FastAPI(title="Home Credit Default Inference API with Triton")
 

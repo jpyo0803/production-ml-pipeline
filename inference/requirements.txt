@@ -1,7 +1,7 @@
 fastapi
 uvicorn
-mlflow
 pandas
 torch
 boto3
 tritonclient[http]
+requests
