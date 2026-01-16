@@ -2,7 +2,7 @@
 set -e
 
 echo "===== Downloading model from MLflow ====="
-python3 download_from_mlflow.py
+python3 download_model.py
 
 echo "===== Start Triton Inference Server ====="
 exec tritonserver \

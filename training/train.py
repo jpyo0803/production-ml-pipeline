@@ -34,17 +34,18 @@ torch.cuda.manual_seed_all(seed)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
+MAX_BATCH_SIZE = 16
 
-def log_triton_config(model_name, input_dim, artifact_path):    
+def log_triton_config(model_name, max_batch_size, input_dim, artifact_path):
     config_content = f"""name: "{model_name}"
 platform: "onnxruntime_onnx"
-max_batch_size: 0
+max_batch_size: {max_batch_size}
 
 input [
   {{
     name: "input"
     data_type: TYPE_FP32
-    dims: [ -1, {input_dim} ]
+    dims: [ {input_dim} ]
   }}
 ]
 
@@ -52,7 +53,7 @@ output [
   {{
     name: "output"
     data_type: TYPE_FP32
-    dims: [ -1 ]
+    dims: [ 1 ]
   }}
 ]
 
@@ -88,6 +89,7 @@ def convert_to_onnx_model(model, scaler, input_dim):
         buffer,
         input_names=["input"],
         output_names=["output"],
+        # 첫 번째 차원은 배치 크기로 유동적임을 명시
         dynamic_axes={
             "input": {0: "batch_size"},
             "output": {0: "batch_size"},
@@ -119,14 +121,14 @@ def train():
             model.train()
             optimizer.zero_grad()
             logits = model(X_train)
-            loss = loss_fn(logits, y_train)
+            loss = loss_fn(logits.squeeze(1), y_train)
             loss.backward()
             optimizer.step()
 
             model.eval()
             with torch.no_grad():
                 val_logits = model(X_val)
-                preds = torch.sigmoid(val_logits).cpu().numpy()
+                preds = torch.sigmoid(val_logits).squeeze(1).cpu().numpy()
                 auc = roc_auc_score(y_val.cpu().numpy(), preds)
 
             print(f"Epoch {epoch+1}/{config.num_epochs}, Loss: {loss.item():.4f}, Val AUC: {auc:.4f}")
@@ -155,6 +157,7 @@ def train():
         # Triton용 설정 파일 생성 및 저장
         log_triton_config(
             model_name="HomeCreditDefaultModel",
+            max_batch_size=MAX_BATCH_SIZE,
             input_dim=X_train.shape[1],
             artifact_path=artifact_path,
         )

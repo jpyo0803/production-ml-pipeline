@@ -12,4 +12,4 @@ class TabularModel(nn.Module):
         )
 
     def forward(self, x):
-        return self.net(x).squeeze(1)
+        return self.net(x) # [Batch, 1]

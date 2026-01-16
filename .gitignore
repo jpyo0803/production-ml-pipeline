@@ -6,3 +6,4 @@ mlruns/
 **/artifacts/
 **/*.onnx
 **/*.pbtxt
+venv/
