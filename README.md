@@ -4,18 +4,19 @@
 
 #### Kubernetes 사용시
 ##### Prerequisite
-- Docker 설치 (Docker version 28.0.4)
-- Kubernetes 설치 (Client Version: v1.32.2, Kustomize Version: v5.5.0, Server Version: v1.34.0)
-- Minikube 설치 (minikube version: v1.37.0)
+- Docker 설치 (Docker Engine Version 28.2.2)
+- Kubernetes 설치 (Client Version: v1.35.0, Kustomize Version: v5.7.1, Server Version: v1.30.14)
+- Kubeadm 설치 (minikube version: v1.30.14)
 ##### 실행방법
 ```sh
+$ ./build_and_push_images.sh
 $ ./launch_k8s.sh
 ```
 
 ##### 추론 요청 예시
-단일 요청 (포트번호 xxxxx는 launch_k8s.sh에 실행 마지막에 표시됨)
+단일 요청 (IP는 launch_k8s.sh에 실행 마지막에 표시됨)
 ```sh
-curl -X POST http://127.0.0.1:xxxxx/predict \
+curl -X POST http://x.x.x.x:30080/predict \
   -H "Content-Type: application/json" \
   -d '{
     "AMT_INCOME_TOTAL": 50000,
@@ -30,9 +31,9 @@ curl -X POST http://127.0.0.1:xxxxx/predict \
     "bureau_amt_credit_sum_overdue": 0
   }'
 ```
-배치 요청 (포트번호 xxxxx는 launch_k8s.sh에 실행 마지막에 표시됨)
+배치 요청 (IP는 launch_k8s.sh에 실행 마지막에 표시됨)
 ```sh
-curl -X POST http://127.0.0.1:xxxxx/predict/batch \
+curl -X POST http://x.x.x.x:30080/predict/batch \
   -H "Content-Type: application/json" \
   -d '[
     {
@@ -63,14 +64,14 @@ curl -X POST http://127.0.0.1:xxxxx/predict/batch \
 ```
 #### Docker compose 사용시
 ##### Prerequisite
-- Docker 설치 (Docker version 28.0.4)
-- Docker compose 설치 (Docker Compose version v2.34.0-desktop.1)
+- Docker 설치 (Docker engine Version 28.2.2)
+- Docker compose 설치 (Docker Compose version v5.0.1)
 - MinIO client 설치 
-```sh
-$ curl -O https://dl.min.io/client/mc/release/linux-amd64/mc
-$ chmod +x mc
-$ sudo mv mc /usr/local/bin/
-```
+  ```sh
+  $ curl -O https://dl.min.io/client/mc/release/linux-amd64/mc
+  $ chmod +x mc
+  $ sudo mv mc /usr/local/bin/
+  ```
 
 ##### 실행방법
 ```sh
