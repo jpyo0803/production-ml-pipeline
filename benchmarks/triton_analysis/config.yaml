@@ -1,0 +1,26 @@
+triton_launch_mode: docker
+triton_docker_image: nvcr.io/nvidia/tritonserver:24.01-py3
+
+profile_models:
+  HomeCreditDefaultModel:
+    model_config_parameters:
+      # 배칭 상한선 실험
+      max_batch_size: [8, 16, 32, 64]
+      
+      # 다이내믹 배칭 세부 설정 (Triton이 요청을 얼마나 기다릴지)
+      dynamic_batching:
+        # 지연 시간을 0(즉시), 500ms 스윕
+        max_queue_delay_microseconds: [0, 500]
+      # 병렬 처리 유닛 실험
+      instance_group:
+        - count: [1, 2]
+          kind: KIND_CPU
+
+    perf_analyzer_flags:
+      shape: ["input:10"]
+
+# 클라이언트 측 부하(병렬 요청 수)
+# 다이내믹 배칭이 성능을 내려면 배치 사이즈보다 큰 동시 요청수가 필요합니다.
+concurrency: [1, 8, 32, 64]
+
+override_output_model_repository: true

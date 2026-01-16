@@ -7,3 +7,8 @@ mlruns/
 **/*.onnx
 **/*.pbtxt
 venv/
+
+# Ignore benchmark results and models
+benchmarks/triton_analysis/results/*
+benchmarks/triton_analysis/models/*
+benchmarks/triton_analysis/checkpoints/*
