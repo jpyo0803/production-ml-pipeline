@@ -1,0 +1,16 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: triton-servicemonitor
+  namespace: production-ml-pipeline
+  labels:
+    # 아까 Prometheus 설치 시 사용한 release 이름과 일치해야 합니다.
+    release: obs 
+spec:
+  selector:
+    matchLabels:
+      app: triton # Triton 서비스의 라벨과 일치해야 함
+  endpoints:
+  - port: metrics # 서비스 포트 설정에서 정의한 name
+    interval: 15s # 수집 주기
+    path: /metrics

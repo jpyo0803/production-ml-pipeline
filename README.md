@@ -12,6 +12,15 @@
   ```sh
   $ kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
   ```
+- Prometheus Stack 설치 (Prometheus, Grafana, Alertmanager 한번에 설치)
+  ```sh
+  $ helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+  $ helm repo update
+  $ helm install obs prometheus-community/kube-prometheus-stack \
+  --namespace observability --create-namespace
+  ```
+
+
 ##### 실행방법
 ```sh
 $ ./build_and_push_images.sh
