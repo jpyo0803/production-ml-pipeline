@@ -3,7 +3,8 @@ kind: Deployment
 metadata:
   name: triton
 spec:
-  replicas: 1
+  # replicas: 1
+  # 포드 수는 hpa.yaml에서 정의한 minReplicas 및 maxReplicas에 의해 관리됩니다.
   selector:
     matchLabels:
       app: triton
@@ -34,6 +35,14 @@ spec:
         # Triton이 모델 저장소를 바라볼 수 있도록 설정
         - name: AWS_ENDPOINT_URL
           value: "http://minio:{{ .Values.infrastructure.minio.apiPort }}"
+
+        resources:
+          requests:
+            cpu: "500m"     # 이 값을 기준으로 60%(HPA 설정값)를 계산
+            memory: "1Gi"
+          limits:
+            cpu: "1"
+            memory: "2Gi"
 ---
 apiVersion: v1
 kind: Service

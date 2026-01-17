@@ -8,6 +8,10 @@
 - Kubernetes 설치 (Client Version: v1.35.0, Kustomize Version: v5.7.1, Server Version: v1.30.14)
 - Kubeadm 설치 (GitVersion: v1.30.14)
 - Helm 설치 (Version: v4.0.5)
+- Kubernetes metrics-server 설치 (HPA을 하기위해 필요)
+  ```sh
+  $ kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+  ```
 ##### 실행방법
 ```sh
 $ ./build_and_push_images.sh

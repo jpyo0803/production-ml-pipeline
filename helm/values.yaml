@@ -40,6 +40,12 @@ mlflow:
 inference:
   servicePort: 8080
   nodePort: 30080
+  replicaCount: 2
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
 
 # Triton 설정
 triton:
@@ -47,6 +53,12 @@ triton:
   modelAlias: "prod"
   httpPort: 8000
   metricsPort: 8002
+  replicaCount: 1
+  hpa:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 60
 
 # 데이터 업로드 활성화 여부
 dataUpload:
