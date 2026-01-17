@@ -12,23 +12,17 @@
   ```sh
   $ kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
   ```
-- Prometheus Stack 설치 (Prometheus, Grafana, Alertmanager 한번에 설치)
-  ```sh
-  $ helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-  $ helm repo update
-  $ helm install obs prometheus-community/kube-prometheus-stack \
-  --namespace observability --create-namespace
-  ```
+- [Prometheus 설치](./observability/README.md)
+- [ArgoCD 설치](./argocd/README.md)
 
 
 ##### 실행방법
 ```sh
+# 실행에 필요한 도커 이미지 빌드 및 도커허브에 업로드
 $ ./build_and_push_images.sh
-$ helm upgrade --install ml-pipeline ./helm \                     
-  --namespace production-ml-pipeline \
-  --create-namespace \
-  --wait \
-  --timeout 30m0s
+
+# ArgoCD 실행
+$ kubectl apply -f argocd/argocd-app.yaml
 ```
 
 ##### 추론 요청 예시

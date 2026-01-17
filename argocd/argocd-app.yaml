@@ -1,0 +1,36 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ml-pipeline-gitops
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/jpyo0803/production-ml-pipeline.git' # 대상 리포지토리
+    targetRevision: HEAD
+    path: 'helm' # 헬름 차트가 들어있는 폴더 경로
+    helm:
+      valueFiles:
+        - values.yaml
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: production-ml-pipeline
+  syncPolicy:
+    automated: # 자동 재배포를 위해 필요 
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+  ignoreDifferences:
+    - group: ""
+      kind: Service
+      name: minio  # MinIO 서비스 이름이 다를 경우 수정해 주세요.
+      jsonPointers:
+        - /spec/clusterIP        # 자동 할당되는 내부 IP 무시
+        - /spec/clusterIPs       # 리스트 형태의 IP 무시
+        - /spec/ipFamilies       # IPv4 관련 자동 설정 무시
+        - /spec/ipFamilyPolicy   # 네트워크 정책 기본값 무시
+        - /spec/ports/0/nodePort # 첫 번째 포트의 NodePort 무시
+        - /spec/ports/1/nodePort # 두 번째 포트의 NodePort 무시
+        - /spec/internalTrafficPolicy
+        - /spec/externalTrafficPolicy
