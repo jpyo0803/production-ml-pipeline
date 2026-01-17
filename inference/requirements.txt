@@ -5,3 +5,4 @@ torch
 boto3
 tritonclient[http]
 requests
+prometheus-fastapi-instrumentator

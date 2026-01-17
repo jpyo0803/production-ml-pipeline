@@ -1,0 +1,15 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: inference-servicemonitor
+  namespace: production-ml-pipeline
+  labels:
+    release: obs # Prometheus가 감시하는 라벨
+spec:
+  selector:
+    matchLabels:
+      app: inference
+  endpoints:
+  - port: http
+    interval: 15s
+    path: /metrics

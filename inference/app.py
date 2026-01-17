@@ -6,6 +6,8 @@ from typing import List
 
 import os
 
+from prometheus_fastapi_instrumentator import Instrumentator
+
 TRITON_HOST = os.getenv("TRITON_HOST", "localhost")
 TRITON_PORT = os.getenv("TRITON_PORT", "8000")
 MODEL_NAME = os.getenv("MODEL_NAME", "HomeCreditDefaultModel")
@@ -13,6 +15,9 @@ MODEL_NAME = os.getenv("MODEL_NAME", "HomeCreditDefaultModel")
 TRITON_URL = f"http://{TRITON_HOST}:{TRITON_PORT}/v2/models/{MODEL_NAME}/infer"
 
 app = FastAPI(title="Home Credit Default Inference API with Triton")
+
+# 앱 시작 시 메트릭 측정 및 /metrics 엔드포인트 자동 생성
+Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 
 FEATURE_ORDER = [
     "AMT_INCOME_TOTAL",
