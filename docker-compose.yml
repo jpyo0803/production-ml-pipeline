@@ -20,7 +20,7 @@ services:
 
   # MinIO (S3 호환 오브젝트 스토리지)
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: minio
     command: server /data --console-address ":9001" # 콘솔 UI 활성화
     ports:
@@ -34,7 +34,7 @@ services:
 
   # MinIO 서버가 시작된 후에 버킷을 생성하는 1회성 초기화 작업
   minio-init:
-    image: minio/mc:latest
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
     depends_on:
       - minio # MinIO가 먼저 시작되어야 함
     entrypoint: > # mc 명령어로 MinIO에 접속하여 버킷 생성
