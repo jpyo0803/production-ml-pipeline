@@ -1,0 +1,31 @@
+{{- if eq .Values.dataUpload.enabled true }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-data-uploader
+  annotations:
+    "helm.sh/hook": post-install # 설치 후에 실행되는 훅
+    "helm.sh/hook-weight": "1" # 실행 순서 지실정 (낮을수록 먼저 실행)
+    "helm.sh/hook-delete-policy": before-hook-creation # 재설치 시 이전 훅 삭제
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: uploader
+        image: {{ .Values.images.minioMc }}
+        command: ["/bin/sh", "/scripts/upload.sh"]
+        volumeMounts:
+        - name: script-vol
+          mountPath: /scripts
+        - name: data-vol
+          mountPath: /data
+      volumes:
+      - name: script-vol
+        configMap:
+          name: {{ .Release.Name }}-upload-script
+      - name: data-vol
+        hostPath:
+          path: {{ .Values.dataUpload.hostPath }} # csv 파일이 위치한 호스트 경로
+          type: Directory
+{{- end }}

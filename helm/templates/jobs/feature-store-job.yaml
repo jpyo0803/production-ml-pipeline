@@ -1,0 +1,71 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-feature-store-init
+  annotations:
+    "helm.sh/hook": post-install # 설치 후에 실행되는 훅
+    "helm.sh/hook-weight": "2" # 데이터 업로더 작업 후에 실행 (데이터 업로더는 "1"로 설정) 
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      # MinIO가 준비될 때까지 대기하는 로직 추가
+      initContainers:
+      - name: wait-for-minio
+        image: {{ .Values.images.minioMc | quote }}
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Waiting for MinIO..."
+
+          until mc alias set myminio http://minio:{{ .Values.infrastructure.minio.apiPort }} {{ .Values.infrastructure.minio.rootUser }} {{ .Values.infrastructure.minio.rootPassword }}; do
+            sleep 2
+          done
+
+          echo "Creating buckets from list..."
+          {{- range .Values.dataUpload.buckets }}
+          mc mb myminio/{{ . }} || true
+          {{- end }}
+          
+          echo "All buckets checked/created."
+      containers:
+      - name: feature-store-etl
+        image: {{ .Values.images.featureStore | quote }}
+        env:
+        - name: RAW_S3_PREFIX
+          value: {{ .Values.featureStore.rawS3Prefix | quote }}
+        - name: PROCESSED_S3_PREFIX
+          value: {{ .Values.featureStore.processedS3Prefix | quote }}
+        # Feast/Boto3 표준 환경 변수명으로 변경
+        - name: AWS_ACCESS_KEY_ID
+          value: {{ .Values.infrastructure.minio.rootUser | quote }}
+        - name: AWS_SECRET_ACCESS_KEY
+          value: {{ .Values.infrastructure.minio.rootPassword | quote }}
+        # 기존 스크립트에서 혹시 사용할지 모르니 유지 (선택)
+        - name: MINIO_ACCESS_KEY
+          value: {{ .Values.infrastructure.minio.rootUser | quote }}
+        - name: MINIO_SECRET_KEY
+          value: {{ .Values.infrastructure.minio.rootPassword | quote }}
+        # S3 Endpoint 설정 (MinIO 사용 시 필수)
+        - name: FEAST_S3_ENDPOINT_URL
+          value: {{ .Values.featureStore.s3Endpoint | quote }}
+        volumeMounts:
+        - name: feast-data
+          mountPath: /app/feast_repo/data
+        command:
+        - /bin/sh
+        - -c
+        - |
+          # mc 대기 로직이 빠지고 바로 본 작업 시작
+          echo "[Feature Store] Running ETL Scripts..."
+          python scripts/build_application_features.py
+          python scripts/build_bureau_features.py
+          
+          echo "[Feature Store] Applying Feast Registry..."
+          cd feast_repo
+          feast apply
+      volumes:
+      - name: feast-data
+        persistentVolumeClaim:
+          claimName: feast-registry-pvc

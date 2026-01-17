@@ -1,0 +1,62 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-training
+  annotations:
+    # 최초 배포 및 이후 배포 시 모두 실행
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "3" # Feature Store 작업 후에 실행
+    # 재실행 트리거: 다음 배포(upgrade) 시 기존 성공/실패 여부와 상관없이 삭제 후 재생성
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      # MLflow 및 Feast 준비 대기용
+      initContainers:
+      - name: wait-for-mlflow
+        image: busybox:latest
+        env:
+          # MLflow 트래킹 정보
+          - name: MLFLOW_TRACKING_URI
+            value: "http://mlflow:{{ .Values.mlflow.servicePort }}"
+        command:
+        - /bin/sh
+        - -c
+        - |
+          until wget --spider -q "${MLFLOW_TRACKING_URI}/health"; do
+            echo "Waiting for MLflow at ${MLFLOW_TRACKING_URI}..."
+            sleep 5
+          done
+          echo "MLflow is ready!"
+
+      containers:
+        - name: training
+          image: {{ .Values.images.training | quote }}
+          env:
+          - name: FEAST_REPO_PATH
+            value: "/app/feast_repo"
+          - name: MLFLOW_TRACKING_URI
+            value: "http://mlflow:{{ .Values.mlflow.servicePort }}"
+          # S3(MinIO) 접속을 위한 필수 환경 변수
+          - name: AWS_ACCESS_KEY_ID
+            value: {{ .Values.infrastructure.minio.rootUser | quote }}
+          - name: AWS_SECRET_ACCESS_KEY
+            value: {{ .Values.infrastructure.minio.rootPassword | quote }}
+          - name: FEAST_S3_ENDPOINT_URL
+            value: "http://minio:{{ .Values.infrastructure.minio.apiPort }}"
+          - name: AWS_ENDPOINT_URL
+            value: "http://minio:{{ .Values.infrastructure.minio.apiPort }}"
+          volumeMounts:
+          - name: feast-repo-config
+            mountPath: /app/feast_repo/feature_store.yaml
+            subPath: feature_store.yaml
+          - name: feast-data
+            mountPath: /app/feast_repo/data
+      volumes:
+      - name: feast-repo-config
+        configMap:
+          name: feast-repo
+      - name: feast-data
+        persistentVolumeClaim:
+          claimName: feast-registry-pvc

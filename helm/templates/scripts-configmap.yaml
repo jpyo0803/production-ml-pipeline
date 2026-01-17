@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-upload-script
+  labels:
+    app: data-uploader
+data:
+  upload.sh: |
+      #!/bin/sh
+      set -e
+
+      # 변수 설정
+      MINIO_URL="http://minio:{{ .Values.infrastructure.minio.apiPort }}"
+      ROOT_USER="{{ .Values.infrastructure.minio.rootUser }}"
+      ROOT_PW="{{ .Values.infrastructure.minio.rootPassword }}"
+
+      # mc alias set 자체로 대기 로직 구현
+      echo "Waiting for MinIO to be ready at $MINIO_URL..."
+      
+      # mc alias set이 성공할 때까지 무한 루프 (접속 실패 시 non-zero exit code 반환)
+      until mc alias set myminio "$MINIO_URL" "$ROOT_USER" "$ROOT_PW" > /dev/null 2>&1; do
+        echo "Still waiting for MinIO..."
+        sleep 2
+      done
+
+      echo "MinIO is ready! Starting data upload..."
+
+      # 버킷 생성 및 데이터 업로드
+      mc mb myminio/{{ index .Values.dataUpload.buckets 0 }} || true
+      mc cp /data/*.csv myminio/{{ index .Values.dataUpload.buckets 0 }}/{{ .Values.dataUpload.rawPath }}/
+      
+      echo "Upload Complete!"
+      mc ls -r myminio/{{ index .Values.dataUpload.buckets 0 }}

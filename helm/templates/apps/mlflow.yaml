@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mlflow
+  template:
+    metadata:
+      labels:
+        app: mlflow
+    spec:
+      containers:
+      - name: mlflow
+        image: {{ .Values.images.mlflow | quote }}
+        ports:
+        - containerPort: {{ .Values.mlflow.servicePort }}
+        env:
+        # Postgres 백엔드 연결
+        - name: BACKEND_STORE_URI
+          value: "postgresql://{{ .Values.infrastructure.postgres.user }}:{{ .Values.infrastructure.postgres.password }}@postgres:{{ .Values.infrastructure.postgres.port }}/{{ .Values.infrastructure.postgres.db }}"
+        # MinIO 아티팩트 저장소 연결
+        - name: ARTIFACT_ROOT
+          value: "s3://mlflow"
+        # S3 인증 정보 (표준 AWS 환경 변수 사용)
+        - name: AWS_ACCESS_KEY_ID
+          value: {{ .Values.infrastructure.minio.rootUser | quote }}
+        - name: AWS_SECRET_ACCESS_KEY
+          value: {{ .Values.infrastructure.minio.rootPassword | quote }}
+        - name: MLFLOW_S3_ENDPOINT_URL
+          value: "http://minio:{{ .Values.infrastructure.minio.apiPort }}"
+        - name: MLFLOW_S3_IGNORE_TLS
+          value: "true"
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            mlflow server \
+              --backend-store-uri $BACKEND_STORE_URI \
+              --default-artifact-root $ARTIFACT_ROOT \
+              --host 0.0.0.0 \
+              --port {{ .Values.mlflow.servicePort }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow
+spec:
+  selector:
+    app: mlflow
+  ports:
+  - port: {{ .Values.mlflow.servicePort }}
+    targetPort: {{ .Values.mlflow.servicePort }}

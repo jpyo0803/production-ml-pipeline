@@ -12,3 +12,6 @@ venv/
 benchmarks/triton_analysis/results/*
 benchmarks/triton_analysis/models/*
 benchmarks/triton_analysis/checkpoints/*
+
+# Ignore files only for convenience during development
+reset_helm.sh

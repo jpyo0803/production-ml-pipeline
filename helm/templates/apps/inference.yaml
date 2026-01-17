@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inference
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inference
+  template:
+    metadata:
+      labels:
+        app: inference
+    spec:
+      containers:
+      - name: inference
+        image: {{ .Values.images.inference | quote }}
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: {{ .Values.inference.servicePort }}
+        env:
+        - name: TRITON_HOST
+          value: "triton"
+        - name: TRITON_PORT
+          value: "8000"
+        - name: MODEL_NAME
+          value: "HomeCreditDefaultModel"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: inference
+spec:
+  type: NodePort
+  selector:
+    app: inference
+  ports:
+  - port: {{ .Values.inference.servicePort }}
+    targetPort: {{ .Values.inference.servicePort }}
+    nodePort: {{ .Values.inference.nodePort }} # 외부에서 접근할 포트

@@ -6,15 +6,20 @@
 ##### Prerequisite
 - Docker 설치 (Docker Engine Version 28.2.2)
 - Kubernetes 설치 (Client Version: v1.35.0, Kustomize Version: v5.7.1, Server Version: v1.30.14)
-- Kubeadm 설치 (minikube version: v1.30.14)
+- Kubeadm 설치 (GitVersion: v1.30.14)
+- Helm 설치 (Version: v4.0.5)
 ##### 실행방법
 ```sh
 $ ./build_and_push_images.sh
-$ ./launch_k8s.sh
+$ helm upgrade --install ml-pipeline ./helm \                     
+  --namespace production-ml-pipeline \
+  --create-namespace \
+  --wait \
+  --timeout 30m0s
 ```
 
 ##### 추론 요청 예시
-단일 요청 (IP는 launch_k8s.sh에 실행 마지막에 표시됨)
+단일 요청 (IP는 "$ hostname -I" 명령어를 통해 확인)
 ```sh
 curl -X POST http://x.x.x.x:30080/predict \
   -H "Content-Type: application/json" \
@@ -31,7 +36,7 @@ curl -X POST http://x.x.x.x:30080/predict \
     "bureau_amt_credit_sum_overdue": 0
   }'
 ```
-배치 요청 (IP는 launch_k8s.sh에 실행 마지막에 표시됨)
+배치 요청 (IP는 "$ hostname -I" 명령어를 통해 확인)
 ```sh
 curl -X POST http://x.x.x.x:30080/predict/batch \
   -H "Content-Type: application/json" \

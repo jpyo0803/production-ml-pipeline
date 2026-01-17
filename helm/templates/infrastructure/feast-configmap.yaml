@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: feast-repo
+data:
+  feature_store.yaml: |
+    project: home_credit_feature_store
+    registry: s3://{{ index .Values.dataUpload.buckets 0 }}/feast/registry.db
+    provider: local
+    entity_key_serialization_version: 2
+    # MinIO(S3 호환) 사용을 위해 엔드포인트 명시가 필요할 수 있음
+    s3_endpoint_url: http://minio:{{ .Values.infrastructure.minio.apiPort }}

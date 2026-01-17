@@ -4,6 +4,7 @@ metadata:
   name: feast-registry-pvc
 spec:
   accessModes: ["ReadWriteOnce"]
+  storageClassName: {{ .Values.infrastructure.storageClass | quote}}
   resources:
     requests:
-      storage: 1Gi
+      storage: {{ .Values.featureStore.registryStorageSize | default "1Gi" }}

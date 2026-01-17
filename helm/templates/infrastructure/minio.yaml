@@ -1,0 +1,75 @@
+# PersistentVolumeClaim for MinIO storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minio-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ .Values.infrastructure.storageClass | quote}}
+  resources:
+    requests:
+      storage: {{ .Values.infrastructure.minio.storageSize }}
+---
+# Deployment for MinIO
+apiVersion: apps/v1 
+kind: Deployment
+metadata:
+  name: minio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+      - name: minio
+        image: {{ .Values.images.minio | quote }}
+        args: ["server", "/data", "--console-address", ":{{ .Values.infrastructure.minio.consolePort }}"]
+        env:
+        - name: MINIO_ROOT_USER
+          value: {{ .Values.infrastructure.minio.rootUser | quote }}
+        - name: MINIO_ROOT_PASSWORD
+          value: {{ .Values.infrastructure.minio.rootPassword | quote }}
+        ports:
+        - containerPort: {{ .Values.infrastructure.minio.apiPort }}
+        - containerPort: {{ .Values.infrastructure.minio.consolePort }}
+        volumeMounts:
+        - name: minio-data
+          mountPath: /data
+      volumes:
+      - name: minio-data
+        persistentVolumeClaim:
+          claimName: minio-pvc
+---
+# Service for MinIO
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+spec:
+  selector:
+    app: minio
+  ports:
+  - name: api
+    port: {{ .Values.infrastructure.minio.apiPort }}
+    targetPort: {{ .Values.infrastructure.minio.apiPort }}
+  - name: console
+    port: {{ .Values.infrastructure.minio.consolePort }}
+    targetPort: {{ .Values.infrastructure.minio.consolePort }}
+  type: NodePort
+  selector:
+    app: minio
+  ports:
+  - name: api
+    port: {{ .Values.infrastructure.minio.apiPort }}
+    targetPort: {{ .Values.infrastructure.minio.apiPort }}
+    nodePort: {{ .Values.infrastructure.minio.nodeApiPort }}
+  - name: console
+    port: {{ .Values.infrastructure.minio.consolePort }}
+    targetPort: {{ .Values.infrastructure.minio.consolePort }}
+    nodePort: {{ .Values.infrastructure.minio.nodeConsolePort }}
