@@ -14,4 +14,4 @@ feast apply
 echo "[Feature Store] Feast materialize"
 feast materialize-incremental $(date +%Y-%m-%d)
 
-echo "[Feature Store] READY"
+echo "[Feature Store] Ready"

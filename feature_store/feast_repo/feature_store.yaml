@@ -1,4 +1,4 @@
 project: home_credit_feature_store
-registry: s3://ml-data/feast/registry.db
-provider: local
+registry: s3://ml-data/feast/registry.db # Feature Registry는 모든 Feature 정의를 저장하는 DB입니다.
+provider: local # 로컬 환경에서 실행. aws, gcp 등 클라우드 환경도 지원합니다.
 entity_key_serialization_version: 2
