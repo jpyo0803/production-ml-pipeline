@@ -29,7 +29,7 @@
     $ kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml 
     $ kubectl patch storageclass local-path -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
     ```
-7. ArgoCD 실행 (이때 **production-ml-pipeline** 어플리케이션은 이미 동작중임을 가정)
+7. ArgoCD 실행
     ```sh
     $ kubectl apply -f argocd/argocd-app.yaml
     ```
