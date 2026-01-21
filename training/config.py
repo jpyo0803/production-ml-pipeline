@@ -8,6 +8,5 @@ class Config:
         #     else 'mps' if torch.backends.mps.is_available() 
         #     else "cpu"
         # )
-        self.label_path = "/app/data/raw/application_train.csv"
-        self.num_epochs = 10
-        self.lr = 1e-3
+        self.num_epochs = 10 # 총 학습 epoch 수
+        self.lr = 1e-3 # 학습률

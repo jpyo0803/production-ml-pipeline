@@ -101,17 +101,26 @@ def convert_to_onnx_model(model, scaler, input_dim):
     return onnx_model
 
 def train():
+    # 데이터 로드
     X_train, y_train, X_val, y_val = load_dataset()
+    print(f"[Success] Dataset loaded")
 
+    # 데이터 스케일링
     scaler = StandardScaler()
     scaler.fit(X_train)
+    print(f"[Success] Scaler fitted")
 
+    # 입력 X를 스케일링하고 텐서로 변환
     X_train = torch.tensor(scaler.transform(X_train), dtype=torch.float32).to(device)
+    # Target y를 텐서로 변환
     y_train = torch.tensor(y_train, dtype=torch.float32).to(device)
 
     X_val = torch.tensor(scaler.transform(X_val), dtype=torch.float32).to(device)
     y_val = torch.tensor(y_val, dtype=torch.float32).to(device)
 
+    print(f"[Success] Dataset scaled and converted to tensor")
+
+    # MLflow 실행
     with mlflow.start_run():
         model = TabularModel(input_dim=X_train.shape[1]).to(device)
         optimizer = torch.optim.Adam(model.parameters(), lr=config.lr)
@@ -133,8 +142,9 @@ def train():
 
             print(f"Epoch {epoch+1}/{config.num_epochs}, Loss: {loss.item():.4f}, Val AUC: {auc:.4f}")
 
-        # Metric 로그
+        # Metric 로그. 현재는 예시로 val_auc만 기록
         mlflow.log_metric("val_auc", auc)
+        print(f"[Success] MLflow logged metrics")
 
         model = model.to("cpu")
 
@@ -145,14 +155,17 @@ def train():
             input_dim=X_train.shape[1],
         )
 
-        artifact_path = "triton_model"
+        print(f"[Success] Model converted to ONNX format")
 
         # MLflow에 ONNX 모델로 저장
+        artifact_path = "triton_model"
         mlflow.onnx.log_model(
             onnx_model=onnx_model,
             artifact_path=artifact_path,
             registered_model_name="HomeCreditDefaultModel",
         )
+
+        print(f"[Success] MLflow logged ONNX model")
 
         # Triton용 설정 파일 생성 및 저장
         log_triton_config(
@@ -161,20 +174,24 @@ def train():
             input_dim=X_train.shape[1],
             artifact_path=artifact_path,
         )
+        print(f"[Success] MLflow logged Triton config")
 
         client = MlflowClient()
+
+        # 최신 모델 버전을 가져옴
         model_version = client.get_latest_versions(
             name="HomeCreditDefaultModel",
             stages=["None"],
         )[0].version
+        print(f"[Success] latest model version retrieved: {model_version}")
 
+        # 최신 모델 버전을 'prod' 앨리어스로 지정
         client.set_registered_model_alias(
             name="HomeCreditDefaultModel",
             alias="prod",
             version=model_version,
         )
-
-        print(f"[MLflow] logged model version: {model_version}")
+        print(f"[Success] model alias 'prod' set to version {model_version}")
 
 if __name__ == "__main__":
     train()

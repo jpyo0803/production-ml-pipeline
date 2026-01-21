@@ -10,9 +10,10 @@ services:
       - ./feature_store/feast_repo:/app/feast_repo
     environment:
       RAW_S3_PREFIX: s3://ml-data/raw # 원시 데이터 위치
-      PROCESSED_S3_PREFIX: s3://ml-data/processed # 전처리된 데이터 위치
-      FEAST_REGISTRY_S3: s3://ml-data/feast/registry.db
+      PROCESSED_S3_PREFIX: s3://ml-data/processed # 가공된 데이터 위치
+      FEAST_REGISTRY_S3: s3://ml-data/feast/registry.db # Feature Registry 위치
 
+      # S3 접속 정보
       AWS_ACCESS_KEY_ID: minioadmin
       AWS_SECRET_ACCESS_KEY: minioadmin123
       AWS_DEFAULT_REGION: us-east-1
@@ -37,7 +38,7 @@ services:
     image: minio/mc:RELEASE.2025-08-13T08-35-41Z
     depends_on:
       - minio # MinIO가 먼저 시작되어야 함
-    entrypoint: > # mc 명령어로 MinIO에 접속하여 버킷 생성
+    entrypoint: > # mc 명령어로 MinIO에 접속하여 초기 세팅 수행
       /bin/sh -c "
       mc alias set local http://minio:9000 minioadmin minioadmin123;
       mc mb -p local/mlflow || true;
@@ -68,8 +69,8 @@ services:
     ports:
       - "5000:5000"
     depends_on:
-      - postgres
-      - minio-init
+      - postgres # Backend Store
+      - minio-init # S3 Storage
     environment:
       # MLflow는 클라이언트들을 대신해 MinIO에 접속하므로 MinIO 접속 정보 필요
       AWS_ACCESS_KEY_ID: minioadmin
