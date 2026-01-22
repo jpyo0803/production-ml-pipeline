@@ -1,4 +1,4 @@
-import requests
+import httpx
 import numpy as np
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -19,6 +19,9 @@ print(f"Triton Inference URL: {TRITON_URL}")
 # API 서버 인스턴스 생인
 app = FastAPI(title="Home Credit Default Inference API with Triton")
 print("FastAPI app created.")
+
+# 비동기 HTTP 클라이언트 생성 (재사용)
+http_client = httpx.AsyncClient(timeout=10.0)
 
 # 앱 시작 시 메트릭 측정 및 /metrics 엔드포인트 자동 생성
 Instrumentator().instrument(app).expose(app, endpoint="/metrics")
@@ -57,6 +60,12 @@ class PredictionRequest(BaseModel):
     bureau_amt_credit_sum: float
     bureau_amt_credit_sum_overdue: float
 
+# 앱 종료 시 클라이언트 리소스 정리
+@app.on_event("shutdown")
+async def shutdown_event():
+    await http_client.aclose()
+    print("HTTP client closed.")
+
 def to_tensor(reqs: List[PredictionRequest]) -> np.ndarray:
     # 요청받은 데이터 리스트(reqs)를 Triton이 이해할 수 있는 Numpy 배열로 변환
     return np.array(
@@ -65,7 +74,7 @@ def to_tensor(reqs: List[PredictionRequest]) -> np.ndarray:
     )
 
 # Triton inference logic (공통)
-def triton_infer(inputs: np.ndarray):
+async def triton_infer_async(inputs: np.ndarray):
     # Triton 서버의 HTTP 프로토콜 규격에 맞춰 JSON 페이로드 생페
     payload = {
         "inputs": [
@@ -79,7 +88,7 @@ def triton_infer(inputs: np.ndarray):
     }
 
     # Triton 서버에 추론 요청 전송
-    res = requests.post(TRITON_URL, json=payload)
+    res = await http_client.post(TRITON_URL, json=payload)
     # HTTP 에러(4xx, 5xx) 발생 시 예외 처리
     res.raise_for_status() 
 
@@ -94,12 +103,12 @@ def triton_infer(inputs: np.ndarray):
 
 # 단일 예측
 @app.post("/predict")
-def predict(req: PredictionRequest):
+async def predict(req: PredictionRequest):
     print(f"Single prediction request received")
 
     inputs = to_tensor([req])  # shape: (1, F)
 
-    probs = triton_infer(inputs)
+    probs = await triton_infer_async(inputs)
 
     return {
         "probability": probs[0]
@@ -108,12 +117,12 @@ def predict(req: PredictionRequest):
 
 # 배치 예측
 @app.post("/predict/batch")
-def predict_batch(reqs: List[PredictionRequest]):
+async def predict_batch(reqs: List[PredictionRequest]):
     print(f"Batch prediction request received")
 
     inputs = to_tensor(reqs)  # shape: (B, F)
 
-    probs = triton_infer(inputs)
+    probs = await triton_infer_async(inputs)
 
     return {
         "probabilities": probs

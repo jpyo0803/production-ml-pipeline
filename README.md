@@ -70,7 +70,9 @@
 - **선형적 확장성 (Linear Scalability)**: 
   - Triton Model Analyzer를 통해 단일 Pod의 성능 한계치(Golden Config)를 명확히 정의했기 때문에, 부하 증가시 Pod 수에 비례하여 시스템 전체 처리량이 선형적으로 증가할 것이라는 신뢰성을 확보하였습니다.
 - **서비스 특성별 차등 스케일링 전략:**
-  - **FastAPI Endpoint (BFF)**: 전형적인 **I/O Bound** 서비스입니다. 사용자 요청을 일차적으로 수용하고 외부 통신(Feast, Triton)을 중재해야 하므로 **2~10개**의 넓은 확장 법위를 설정했습니다. (추후 FastAPI의 Asynchronous 처리를 통해 다수의 동시 접속을 효율적으로 수용하도록 설계할 예정입니다)
+  - **FastAPI Endpoint (BFF)**: 
+    - 전형적인 **I/O Bound** 서비스입니다. 사용자 요청을 일차적으로 수용하고 외부 통신(Feast, Triton)을 중재해야 하므로 **2~10개**의 넓은 확장 법위를 설정했습니다. 
+    - 스레드 풀(Thread Pool) 의존도를 낮추고 Event Loop을 활용함으로써, 최소한의 리소스로 높은 동시성(High Concurrency)과 처리량(Throughput)을 보장합니다. (```async```/```await``` 및 ```httpx``` 기반의 **Fully Asynchronous Non-blocking I/O** 아키텍처 구현)
   - **Triton Server**: 고도의 연산이 필요한 **Compute Bound** 서비스입니다. C++ 기반 엔진으로 이미 최적화되어 있어 단일 유닛당 처리량이 높으므로, 리소스 효율을 위해 **1~5개**의 범위를 설정하였습니다.
 - **로드 밸런싱:**
   - FastAPI와 Triton 사이에는 K8s Service (ClusterIP)가 간단한 로드밸런서(L4 수준) 역할을 수행합니다. 예를 들어 10개의 FastAPI Pod에서 발생하는 요청을 5개의 Triton Pod로 적절히 분산시켜, 각 Triton Pod가 분석된 최적 부하 범위 내에서 동작하도록 유도합니다.

@@ -4,5 +4,5 @@ pandas
 torch
 boto3
 tritonclient[http]
-requests
+httpx
 prometheus-fastapi-instrumentator
