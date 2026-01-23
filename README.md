@@ -12,12 +12,12 @@
 
 1. **Data Layer**: Feast (Feature Store) + MinIO (S3 compatible)
 2. **ML Engine Layer**: Trainer + MLflow (Tracking/Registry) + Postgres (Metadata)
-3. **Serving Layer**: Triton Inference Server (Core Engine) + FastAPI (BFF/Endpoint)
+3. **Serving Layer**: Triton Inference Server (Core Engine) + FastAPI (BFF/Endpoint) + RabbitMQ (Broker) + Log Worker (Consumer)
 4. **Infra & Ops Layer**: Kubernetes (EKS/Local), Helm, ArgoCD (GitOps)
 5. **Observability Layer**: Prometheus + Grafana (ServiceMonitor)
 
 ### 핵심 기술 스택
-- **Infrastructure**: Kubernetes, Docker, Helm, ArgoCD
+- **Infrastructure**: Kubernetes, Docker, Helm, ArgoCD, RabbitMQ
 - **Data/Feature**: Feast, MinIO (S3), PostgreSQL
 - **Model Serving**: NVIDIA Triton Inference Server, FastAPI, Model Analyzer
 - **ML Lifecycle**: MLflow (Tracking & Registry)
@@ -41,13 +41,16 @@
 - **Serving Hierarchy**:
   - **FastAPI (BFF)**: 외부 요청을 수신하고, Feast 온라인 스토어에서 필요한 Feature를 추출한 뒤 Triton으로 전달합니다.
   - **Triton Inference Server**: 고성능 엔진을 통해 실제 추론을 수행합니다.
-- **Feedback Loop**: 추론 로그는 **MinIO**에 저장되어 향후 모델 재학습 및 데이터 드리프트 분석의 기초 자료로 활용됩니다.
+  - **Asynchronous Logging (Feedback Loop):**
+    - **RabbitMQ (Message Broker)**: FastAPI는 추론 결과를 응답함과 동시에 로그 데이터를 RabbitMQ의 Queue로 비동기 전송(Fire-and-Forget)합니다. 이를 통해 로깅 I/O가 추론 Latency에 영향을 주지 않도록 격리했습니다.
+    - **Log Worker**: 별도의 Worker Pod이 큐에서 메세를를지르 소비하여 MinIO에 배치(Batch) 단위로 저장합니다. 이는 향후 모델 재학습 및 데이터 드리프트 분석의 기초자료로 활용됩니다.
 
 ## 3. 핵심 설계 의도
 1. **ONNX 포맷 채택**: 특정 프레임워크(PyTorch, TF 등)에 종속되지 않고, Triton에서 최적화된 엔진(TensorRT 등)으로 변환하기 용이하기 때문입니다.
 2. **BFF(FastAPI) 분리**: 비즈니스 로직(데이터 전처리, Feature 결합)과 순수 추론 로직(Triton)을 분리하여 **각각 독립적인 오토스케일링(HPA)** 이 가능하게 했습니다.
-3. **Artifact & Metadata 분리**: 무거운 모델은 S3(MinIO)에, 가벼운 이력 정보는 RDB(Postgres)에 저장하여 데이터 처리 효율과 쿼리 성능을 모두 잡기위함 입니다.
-4. **Feature Store 도입**: 학습시 사용한 Feature 계산 로직을 추론 시에도 그대로 재사용하여 **Training-Serving Skew** 문제를 차단하기위함 입니다.
+3. **비동기 로깅  아키텍처 (RabbitMQ + Worker)**: 추론 요청 처리(Critical Path)와 로그 저장(Non-critical Path)를 분리했습니다. MinIO(S3) 네트워크 지연이나 장애가 발생하더라도, 사용자에게 반환되는 추론 응답 속도에는 영향을 주지 않도록 **결합도(Decoupling)**을 낮췄습니다.
+4. **Artifact & Metadata 분리**: 무거운 모델은 S3(MinIO)에, 가벼운 이력 정보는 RDB(Postgres)에 저장하여 데이터 처리 효율과 쿼리 성능을 모두 잡기위함 입니다.
+5. **Feature Store 도입**: 학습시 사용한 Feature 계산 로직을 추론 시에도 그대로 재사용하여 **Training-Serving Skew** 문제를 차단하기위함 입니다.
 
 ## 4. 성능 최적화 전략 (Performance Optimization)
 본 프로젝트는 추론 시스템의 효율성을 극대화하기 위해 **수직적 최적화(Vertical)** 와 **수평적 확장(Horizontal)** 을 결합한 2단계 전략을 취합니다. 자세한 사용 방법은 [benchmarks/triton_analysis/README.md](./benchmarks/triton_analysis/README.md) 를 참조바랍니다.
@@ -72,7 +75,7 @@
 - **서비스 특성별 차등 스케일링 전략:**
   - **FastAPI Endpoint (BFF)**: 
     - 전형적인 **I/O Bound** 서비스입니다. 사용자 요청을 일차적으로 수용하고 외부 통신(Feast, Triton)을 중재해야 하므로 **2~10개**의 넓은 확장 법위를 설정했습니다. 
-    - 스레드 풀(Thread Pool) 의존도를 낮추고 Event Loop을 활용함으로써, 최소한의 리소스로 높은 동시성(High Concurrency)과 처리량(Throughput)을 보장합니다. (```async```/```await``` 및 ```httpx``` 기반의 **Fully Asynchronous Non-blocking I/O** 아키텍처 구현)
+    - 스레드 풀(Thread Pool) 의존도를 낮추고 Event Loop을 활용함으로써, 최소한의 리소스로 높은 동시성(High Concurrency)과 처리량(Throughput)을 보장합니다. (```async```/```await``` 및 ```httpx``` 기반의 **Fully Asynchronous Non-blocking I/O** 아키텍처 구현). 또한, 로깅 작업을 **RabbitMQ로 위임**하여 I/O 블로킹이 생기지 않도록 하였습니다.
   - **Triton Server**: 고도의 연산이 필요한 **Compute Bound** 서비스입니다. C++ 기반 엔진으로 이미 최적화되어 있어 단일 유닛당 처리량이 높으므로, 리소스 효율을 위해 **1~5개**의 범위를 설정하였습니다.
 - **로드 밸런싱:**
   - FastAPI와 Triton 사이에는 K8s Service (ClusterIP)가 간단한 로드밸런서(L4 수준) 역할을 수행합니다. 예를 들어 10개의 FastAPI Pod에서 발생하는 요청을 5개의 Triton Pod로 적절히 분산시켜, 각 Triton Pod가 분석된 최적 부하 범위 내에서 동작하도록 유도합니다.
