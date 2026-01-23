@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rabbitmq
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: rabbitmq
+    component: message-broker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rabbitmq
+  template:
+    metadata:
+      labels:
+        app: rabbitmq
+        component: message-broker
+    spec:
+      containers:
+        - name: rabbitmq
+          image: "{{ .Values.images.rabbitmq }}"
+          ports:
+            - containerPort: 5672
+              name: amqp
+            - containerPort: 15672
+              name: management
+          env:
+            - name: RABBITMQ_DEFAULT_USER
+              value: "{{ .Values.infrastructure.rabbitmq.user }}"
+            - name: RABBITMQ_DEFAULT_PASS
+              value: "{{ .Values.infrastructure.rabbitmq.password }}"
+          # 헬스 체크 (RabbitMQ가 준비될 때까지 기다림)
+          readinessProbe:
+            tcpSocket:
+              port: 5672
+            initialDelaySeconds: 10
+            periodSeconds: 5
+
+---
+# 내부 통신용 Service (AMQP 5672)
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: rabbitmq
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5672
+      targetPort: 5672
+      name: amqp
+    - port: 15672
+      targetPort: 15672
+      name: management
+  selector:
+    app: rabbitmq
+
+---
+# 관리자 UI 외부 접속용 Service (NodePort 15672)
+# 브라우저에서 http://노드IP:30672 로 접속해서 큐 상태 확인 가능
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq-ui
+  namespace: {{ .Values.global.namespace }}
+spec:
+  type: NodePort
+  ports:
+    - port: 15672
+      targetPort: 15672
+      nodePort: {{ .Values.infrastructure.rabbitmq.nodePortMgmt }}
+      name: management
+  selector:
+    app: rabbitmq

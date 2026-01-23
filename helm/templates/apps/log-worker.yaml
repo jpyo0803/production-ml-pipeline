@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: log-worker
+spec:
+  replicas: {{ .Values.logWorker.replicaCount }}
+  selector:
+    matchLabels:
+      app: log-worker
+  template:
+    metadata:
+      labels:
+        app: log-worker
+    spec:
+      containers:
+      - name: log-worker
+        image: {{ .Values.images.logWorker | quote }}
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: RABBITMQ_URL
+          value: "amqp://{{ .Values.infrastructure.rabbitmq.user }}:{{ .Values.infrastructure.rabbitmq.password }}@rabbitmq:{{ .Values.infrastructure.rabbitmq.port }}/"
+
+        - name: QUEUE_NAME
+          value: {{ .Values.inference.queueName | quote }}
+
+        - name: AWS_ENDPOINT_URL
+          value: "http://minio:{{ .Values.infrastructure.minio.apiPort }}"
+        - name: AWS_ACCESS_KEY_ID
+          value: {{ .Values.infrastructure.minio.rootUser | quote }}
+        - name: AWS_SECRET_ACCESS_KEY
+          value: {{ .Values.infrastructure.minio.rootPassword | quote }}
+        - name: AWS_DEFAULT_REGION
+          value: "us-east-1"
+
+        - name: S3_BUCKET_NAME
+          value: "inference-logs"
+
+        - name: BATCH_SIZE
+          value: {{ .Values.logWorker.batchSize | quote }}
+        - name: FLUSH_INTERVAL
+          value: {{ .Values.logWorker.flushInterval | quote }}
+        
+        - name: PYTHONUNBUFFERED
+          value: "1"
+
+        # 리소스 제한 (OOM 방지)
+        resources:
+          {{- toYaml .Values.logWorker.resources | nindent 12 }}

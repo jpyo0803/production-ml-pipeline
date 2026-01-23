@@ -13,16 +13,20 @@ images:
   triton: "jpyo0803/triton:latest"
   inference: "jpyo0803/inference:latest"
   uploader: "alpine:3.19"
+  rabbitmq: "rabbitmq:3-management"
+  logWorker: "jpyo0803/log-worker:latest"
 
 # Infra 설정
 infrastructure:
   storageClass: "local-path"
+
   postgres:
     db: "mlflow"
     user: "mlflow"
     password: "mlflow"
     port: 5432
     storageSize: "5Gi"
+
   minio:
     rootUser: "minioadmin"
     rootPassword: "minioadmin123"
@@ -31,6 +35,13 @@ infrastructure:
     nodePortApi: 30900
     nodePortConsole: 30901
     storageSize: "10Gi"
+
+  rabbitmq:
+    user: "guest"
+    password: "guest"
+    port: 5672
+    mgmtPort: 15672
+    nodePortMgmt: 30672
 
 # MLOps 컴포넌트 설정
 mlflow:
@@ -41,11 +52,25 @@ inference:
   servicePort: 8080
   nodePort: 30080
   replicaCount: 2
+  queueName: "inference_logs"
   hpa:
     enabled: true
     minReplicas: 2
     maxReplicas: 10
     targetCPUUtilizationPercentage: 70
+
+# 로그 워커 설정
+logWorker:
+  replicaCount: 1 # 로그 양이 많아지면 이 숫자만 늘리면 됨
+  batchSize: 30
+  flushInterval: 10
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
 
 # Triton 설정
 triton:
@@ -69,6 +94,7 @@ dataUpload:
     - ml-data
     - mlflow
     - models
+    - inference-logs
   rawPath: "raw"
 
 # Feature Store 설정

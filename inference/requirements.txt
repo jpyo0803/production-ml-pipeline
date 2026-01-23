@@ -6,3 +6,5 @@ boto3
 tritonclient[http]
 httpx
 prometheus-fastapi-instrumentator
+aio-pika
+flask

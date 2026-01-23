@@ -1,6 +1,13 @@
 version: "3.9"
 
 services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672" # RabbitMQ 기본 포트
+      - "15672:15672" # RabbitMQ 관리 UI 포트
+
   feature-store:
     build: ./feature_store
     depends_on:
@@ -44,6 +51,7 @@ services:
       mc mb -p local/mlflow || true;
       mc mb -p local/ml-data || true;
       mc mb -p local/models || true;
+      mc mb -p local/inference-logs || true;
       exit 0;
       "
     restart: "no"
@@ -130,10 +138,27 @@ services:
       - "8080:8080" # FastAPI
     depends_on:
       - mlflow
+      - rabbitmq
     environment:
       TRITON_HOST: triton
       TRITON_PORT: "8000"
       MODEL_NAME: HomeCreditDefaultModel
+
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+
+  log-worker:
+    build: ./log_worker
+    container_name: log-worker
+    depends_on:
+      - rabbitmq
+      - minio
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin123
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ENDPOINT_URL: http://minio:9000
+      S3_BUCKET_NAME: inference-logs
 
 volumes:
   minio_data:

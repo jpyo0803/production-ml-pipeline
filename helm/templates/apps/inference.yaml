@@ -26,6 +26,13 @@ spec:
           value: "8000"
         - name: MODEL_NAME
           value: "HomeCreditDefaultModel"
+        - name: RABBITMQ_URL
+          value: "amqp://{{ .Values.infrastructure.rabbitmq.user }}:{{ .Values.infrastructure.rabbitmq.password }}@rabbitmq:{{ .Values.infrastructure.rabbitmq.port }}/"
+        - name: QUEUE_NAME
+          value: {{ .Values.inference.queueName | quote }}
+          
+        - name: PYTHONUNBUFFERED
+          value: "1"
         resources:
           requests:
             cpu: "500m"     # 이 값을 기준으로 70%(HPA 설정값)를 계산

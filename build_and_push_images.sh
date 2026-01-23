@@ -22,3 +22,4 @@ build_and_push mlflow-custom mlflow
 build_and_push training training
 build_and_push triton triton
 build_and_push inference inference
+build_and_push log-worker log_worker
