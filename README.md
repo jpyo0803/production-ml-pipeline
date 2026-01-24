@@ -6,6 +6,7 @@
 2. **비용 효율적 성능 최적화**: Triton Model Analyzer를 통해 하드웨어 제한 내 최적의 처리량(Throughput)을 내는 'Golden Config' 도출
 3. **선형적 확장성 구현**: 최적화된 단일 Pod를 기반으로 클러스터 부하에 따라 유연하게 대응하는 선형적 확장 체계 구축
 4. **인프라의 코드화(IaC) 및 자동화**: Helm과 ArgoCD를 활용하여 배포 과정을 표준화하고 Git 기반의 지속적 배포(CD) 실현
+5. **대용량 데이터 처리 역량 확보**: **PySpark**를 도입하여 메모리 한계(OOM)를 극복하고, GB~TB 단위의 데이터도 안정적으로 처리할 수 있는 분산 처리 환경 구축
 
 ### 시스템 아키텍처
 ![Overview](images/overview.png)
@@ -18,7 +19,7 @@
 
 ### 핵심 기술 스택
 - **Infrastructure**: Kubernetes, Docker, Helm, ArgoCD, RabbitMQ
-- **Data/Feature**: Feast, MinIO (S3), PostgreSQL
+- **Data/Feature**: Feast, MinIO (S3), PostgreSQL, PySpark (Distributed ETL)
 - **Model Serving**: NVIDIA Triton Inference Server, FastAPI, Model Analyzer
 - **ML Lifecycle**: MLflow (Tracking & Registry)
 - **Observability**: Prometheus, Grafana
@@ -27,11 +28,13 @@
 이 시스템은 데이터 소스로부터 추론 서비스까지 총 3단계의 파이프라인으로 구성됩니다.
 
 ### Data & Feature Pipeline (준비 단계)
-- **Raw Data Ingestion**: 원천 데이터(CSV)를 **MinIO (S3)** 에 업로드하고, ```feature-store``` 컨테이너가 이를 읽어 Parquet 포맷으로 변환 후 오프라인 스토어(S3)에 저장합니다. 
-- **Feature Management (Feast)**: 학습과 추론에 공통으로 사용될 FeatureView를 정의합니다. ```Materialize``` 과정을 통해 온라인 스토어(현재는 미사용)에 최신 데이터를 동기화하여 추론 시 저지연(Low-latency) 조회를 가능케 합니다. 
+- **Distributed ETL (PySpark)**: 원천 데이터(CSV)가 대용량일 경우 단일 프로세스(일반적으로 Pandas)로는 처리가 불가능합니다. 본 프로젝트는 Spark Cluster(Local Mode)를 활용하여 데이터를 분산 로드하고, 집계(Aggregation) 및 조인 연산을 수행한 뒤 Parquet 포맷으로 최적화하여 MinIO(S3)에 저장합니다.
+- **S3 Connectivity**: Hadoop-AWS 라이브러리(```s3a://```)를 통해 Spark가 S3 객체 스토리지에 직접 접근하여 고속으로 데이터를 읽고 씁니다.
+- **Feature Management (Feast)**: Spark로 정제된 Parquet 파일을 기반으로 FeatureView를 정의합니다. 학습과 추론에 공통으로 사용될 데이터를 표준화하여 관리합니다.
 
 ### Model Training & Lifecycle (학습 및 관리 단계)
-- **Training**: Feast에서 ```get_historical_features```를 통해 정합성이 보장된 데이터셋을 추출하여 모델을 학습합니다. 관심사의 분리(Separation of Concerns) 원칙을 지키기위해 학습 Label은 Feature Store에 저장하지않고 S3에서 CSV 파일에서 직접 추출합니다.
+- **Training Dataset Construction**: 학습 시 Feature Store에서 데이터를 추출할 때도 **PySpark**를 사용합니다. 대규모 Feature 데이터와 Label 데이터를 Spark DataFrame으로 로드하여 분산 병합(Join)함으로써 데이터셋 생성 단계에서의 병목을 최소화합니다.
+- **Training**: 정제된 데이터셋을 통해 모델을 학습하며, Label은 Feature Store에 저장하지 않고 S3에서 관리하여 관심사의 분리(Separation of Concerns)를 실현했습니다.
 - **Model Registry (MLflow)**: 학습된 모델은 **ONNX** 포맷으로 변환되어 관리합니다.
   - **Postgres (Backend Store)**: 하이퍼파라미터, 성능 메트릭, 모델 버전 등 **메타데이터** 저장
   - **MinIO (Artifact Store)**: 실제 모델 파일(```.onnx```)과 Triton 설정파일(```.pbtxt)```) 등 **대용량 파일** 저장  
@@ -51,6 +54,7 @@
 3. **비동기 로깅  아키텍처 (RabbitMQ + Worker)**: 추론 요청 처리(Critical Path)와 로그 저장(Non-critical Path)를 분리했습니다. MinIO(S3) 네트워크 지연이나 장애가 발생하더라도, 사용자에게 반환되는 추론 응답 속도에는 영향을 주지 않도록 **결합도(Decoupling)**을 낮췄습니다.
 4. **Artifact & Metadata 분리**: 무거운 모델은 S3(MinIO)에, 가벼운 이력 정보는 RDB(Postgres)에 저장하여 데이터 처리 효율과 쿼리 성능을 모두 잡기위함 입니다.
 5. **Feature Store 도입**: 학습시 사용한 Feature 계산 로직을 추론 시에도 그대로 재사용하여 **Training-Serving Skew** 문제를 차단하기위함 입니다.
+6. **대용량 분산 처리 도입 (PySpark)**: 데이터 수집 및 전처리(ETL) 단계에 **Apache Spark**를 도입하여, 단일 머신의 메모리를 초과하는 대용량 데이터셋도 안정적으로 처리할 수 있는 **분산 데이터 파이프라인**을 구축했습니다. S3(MinIO)와 Spark를 연동하여 I/O 병목을 최소화했으며, Parquet 포맷을 활용해 스토리지 효율성을 극대화했습니다.
 
 ## 4. 성능 최적화 전략 (Performance Optimization)
 본 프로젝트는 추론 시스템의 효율성을 극대화하기 위해 **수직적 최적화(Vertical)** 와 **수평적 확장(Horizontal)** 을 결합한 2단계 전략을 취합니다. 자세한 사용 방법은 [benchmarks/triton_analysis/README.md](./benchmarks/triton_analysis/README.md) 를 참조바랍니다.
