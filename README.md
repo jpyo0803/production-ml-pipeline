@@ -1,3 +1,35 @@
+# Production-ready End-to-End ML Pipeline
+
+## 목차 (Table of Contents)
+
+1. **[1. 프로젝트 개요](#1-프로젝트-개요)**
+    - [핵심 설계 목표](#핵심-설계-목표)
+    - [시스템 아키텍처](#시스템-아키텍처)
+    - [핵심 기술 스택](#핵심-기술-스택)
+
+2. **[2. 상세 아키텍처 및 데이터 흐름](#2-상세-아키텍처-및-데이터-흐름)**
+    - [Data & Feature Pipeline (준비 단계)](#data--feature-pipeline-준비-단계)
+    - [Model Training & Lifecycle (학습 및 관리 단계)](#model-training--lifecycle-학습-및-관리-단계)
+    - [Inference & Serving (추론 및 피드백 단계)](#inference--serving-추론-및-피드백-단계)
+
+3. **[3. 핵심 설계 의도](#3-핵심-설계-의도)**
+
+4. **[4. 성능 최적화 전략 (Performance Optimization)](#4-성능-최적화-전략-performance-optimization)**
+    - [수직적 최적화: Triton Model Analyzer](#수직적-최적화-triton-model-analyzer)
+    - [수평적 확장: Kubernetes HPA](#수평적-확장-kubernetes-hpa-horizontal-pod-autoscaler)
+
+5. **[5. 관측성: 모니터링 기반 구축 (Observability)](#5-관측성-모니터링-기반-구축-observability)**
+    - [모니터링 인프라](#모니터링-인프라)
+
+6. **[6. 배포 자동화: GitOps (Helm + ArgoCD)](#6-배포-자동화-gitops-helm--argocd)**
+    - [Helm: Kubernetes Orchestration](#helm-kubernetes-orchestration)
+    - [ArgoCD: Continuous Delivery](#argocd-continuous-delivery)
+
+7. **[7. Helm + ArgoCD 실행 방법](#7-helm--argocd-실행-방법)**
+    - [데이터 및 사전 준비](#데이터-준비)
+    - [실행 방법](#실행-방법)
+    - [추론 요청 예시](#추론-요청-예시)
+
 ## 1. 프로젝트 개요
 본 프로젝트는 데이터 수집부터 모델 학습, 성능 최적화, 그리고 안정적인 서빙 및 운영(GitOps)까지의 **End-to-End MLOps 파이프라인**을 구축하는 것을 목표로 합니다. 단순한 모델 배포를 넘어, **수직적 최적화(Triton Model Analyzer)** 와 **수평적 확장(K8s HPA)** 을 결합하여 자원 효율성과 시스템 가용성을 동시에 극대화한 실무 지향적 아키텍처를 지향합니다.
 
