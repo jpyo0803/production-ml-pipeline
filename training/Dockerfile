@@ -2,6 +2,13 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
+# 모듈 복사
+COPY common /app/common
+COPY training /app
+COPY feature_store/feast_repo /app/feast_repo
+
+ENV PYTHONPATH="${PYTHONPATH}:/app"
+
 # JAVA JRE 설치, PySpark 구동을 위해 필요
 RUN mkdir -p /usr/share/man/man1 && \
     apt-get update && \
@@ -9,8 +16,6 @@ RUN mkdir -p /usr/share/man/man1 && \
     rm -rf /var/lib/apt/lists/*
 
 ENV JAVA_HOME=/usr/lib/jvm/default-java
-
-COPY . .
 
 # 현재는 CPU only 모드로 설치
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && \

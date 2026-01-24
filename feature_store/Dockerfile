@@ -2,6 +2,12 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
+# 모듈 복사
+COPY common /app/common
+COPY ./feature_store .
+
+ENV PYTHONPATH="${PYTHONPATH}:/app"
+
 # JAVA JRE 설치, PySpark 구동을 위해 필요
 RUN mkdir -p /usr/share/man/man1 && \
     apt-get update && \
@@ -9,8 +15,6 @@ RUN mkdir -p /usr/share/man/man1 && \
     rm -rf /var/lib/apt/lists/*
 
 ENV JAVA_HOME=/usr/lib/jvm/default-java
-
-COPY . .
 
 RUN pip install -r requirements.txt
 

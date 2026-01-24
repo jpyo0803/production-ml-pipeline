@@ -9,7 +9,9 @@ services:
       - "15672:15672" # RabbitMQ 관리 UI 포트
 
   feature-store:
-    build: ./feature_store
+    build:
+      context: .
+      dockerfile: ./feature_store/Dockerfile
     depends_on:
       minio-init:
         condition: service_completed_successfully # MinIO 초기화 완료 후 시작
@@ -94,7 +96,9 @@ services:
       --serve-artifacts
 
   training:
-    build: ./training
+    build:
+      context: .
+      dockerfile: ./training/Dockerfile
     depends_on:
       - feature-store
       - mlflow
@@ -110,9 +114,6 @@ services:
       AWS_DEFAULT_REGION: us-east-1
       AWS_ENDPOINT_URL: http://minio:9000
       MLFLOW_S3_ENDPOINT_URL: http://minio:9000
-    volumes:
-      - ./training:/app
-      - ./feature_store/feast_repo:/app/feast_repo
 
   triton:
     build: ./triton
