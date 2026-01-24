@@ -43,16 +43,8 @@ def main():
     df = df.withColumn("event_timestamp", to_timestamp(lit("2018-01-01")))
     # 가공된 데이터를 S3에 저장
     out_uri = f"{PROCESSED_S3_PREFIX}/application.parquet"
-    df.write.mode("overwrite").parquet(out_uri)
+    df.write.format("delta").mode("overwrite").save(out_uri)
     print(f"[Success] Saved application parquet to {out_uri}")
-
-    # 로컬에도 복사본 저장 (Feast에서 사용하기 위함)
-    local_dir = "/app/feast_repo/data/processed"
-    os.makedirs(local_dir, exist_ok=True)
-    local_path = f"{local_dir}/application.parquet"
-    df.write.mode("overwrite").parquet(local_path)
-
-    print(f"[Success] Copied application parquet to local path {local_path}")
 
     spark.stop()
 

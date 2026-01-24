@@ -7,7 +7,7 @@ COPY common /app/common
 COPY training /app
 COPY feature_store/feast_repo /app/feast_repo
 
-ENV PYTHONPATH="${PYTHONPATH}:/app"
+ENV PYTHONPATH="/app"
 
 # JAVA JRE 설치, PySpark 구동을 위해 필요
 RUN mkdir -p /usr/share/man/man1 && \

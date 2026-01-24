@@ -1,4 +1,23 @@
 project: home_credit_feature_store
 registry: s3://ml-data/feast/registry.db # Feature Registry는 모든 Feature 정의를 저장하는 DB입니다.
 provider: local # 로컬 환경에서 실행. aws, gcp 등 클라우드 환경도 지원합니다.
+offline_store:
+  type: spark
+  spark_conf:
+    # MinIO(S3) 접속 설정
+    spark.hadoop.fs.s3a.endpoint: "http://minio:9000"
+    spark.hadoop.fs.s3a.access.key: "minioadmin"
+    spark.hadoop.fs.s3a.secret.key: "minioadmin123"
+    spark.hadoop.fs.s3a.path.style.access: "true"
+    spark.hadoop.fs.s3a.impl: "org.apache.hadoop.fs.s3a.S3AFileSystem"
+    spark.hadoop.fs.s3a.connection.ssl.enabled: "false"
+
+    # JAR 파일 경로 (feature-store 컨테이너 기준)
+    spark.driver.extraClassPath: "/opt/jars/hadoop-aws-3.3.4.jar:/opt/jars/aws-java-sdk-bundle-1.12.262.jar"
+    spark.executor.extraClassPath: "/opt/jars/hadoop-aws-3.3.4.jar:/opt/jars/aws-java-sdk-bundle-1.12.262.jar"
+
+    # 인터넷에서 Delta 라이브러리를 자동으로 받아옵니다.
+    spark.jars.packages: "io.delta:delta-spark_2.12:3.1.0"
+    spark.sql.extensions: "io.delta.sql.DeltaSparkSessionExtension"
+    spark.sql.catalog.spark_catalog: "org.apache.spark.sql.delta.catalog.DeltaCatalog"
 entity_key_serialization_version: 2

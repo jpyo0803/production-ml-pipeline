@@ -41,17 +41,8 @@ def main():
 
     # 가공된 데이터를 S3에 저장
     out_uri = f"{PROCESSED_S3_PREFIX}/bureau_agg.parquet"
-    agg.write.mode("overwrite").parquet(out_uri)
+    agg.write.format("delta").mode("overwrite").save(out_uri)
     print(f"[Success] Saved bureau parquet to {out_uri}")
-
-    # 로컬에도 복사본 저장 (Feast에서 사용하기 위함)
-    local_dir = "/app/feast_repo/data/processed"
-    os.makedirs(local_dir, exist_ok=True)
-
-    local_path = f"{local_dir}/bureau_agg.parquet"
-    agg.write.mode("overwrite").parquet(local_path)
-
-    print(f"[Success] Copied bureau parquet to local path {local_path}")
 
     spark.stop()
 

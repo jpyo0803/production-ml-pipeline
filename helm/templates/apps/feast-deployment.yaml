@@ -16,27 +16,35 @@ spec:
       - name: feast
         image: {{ .Values.images.featureStore | quote }}
         env:
+        - name: FEAST_REPO_PATH
+          value : "/app/feast_repo"
         - name: AWS_ACCESS_KEY_ID
           value: {{ .Values.infrastructure.minio.rootUser | quote }}
         - name: AWS_SECRET_ACCESS_KEY
           value: {{ .Values.infrastructure.minio.rootPassword | quote }}
         - name: FEAST_S3_ENDPOINT_URL
           value: {{ .Values.featureStore.s3Endpoint | quote }}
+        - name: AWS_ENDPOINT_URL
+          value: {{ .Values.featureStore.s3Endpoint | quote }}
         ports:
         - containerPort: {{ .Values.featureStore.registryPort }}
         volumeMounts:
+        - name: feast-repo-config
+          mountPath: /app/feast_repo/feature_store.yaml
+          subPath: feature_store.yaml
         - name: feast-data
           mountPath: /app/feast_repo/data
         command: ["/bin/sh", "-c"]
         # registry.db 파일이 생성될 때까지 대기 후 서빙 시작
         args:
           - |
-            until [ -f /app/feast_repo/data/registry.db ]; do
-              echo "Waiting for Feast registry to be created by Job..."
-              sleep 5
-            done
-            cd feast_repo && feast serve -p {{ .Values.featureStore.registryPort }} -h 0.0.0.0
+            echo "Starting Feast Server with S3 Registry..."
+            cd /app/feast_repo && feast apply
+            cd /app/feast_repo && feast serve -p {{ .Values.featureStore.registryPort }} -h 0.0.0.0
       volumes:
+      - name: feast-repo-config
+        configMap:
+          name: feast-repo
       - name: feast-data 
         persistentVolumeClaim:
           claimName: feast-registry-pvc

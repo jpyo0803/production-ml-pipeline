@@ -1,12 +1,36 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: feast-repo
+  name: feast-repo 
+  labels:
+    app: feast-feature-store
 data:
   feature_store.yaml: |
-    project: home_credit_feature_store
-    registry: s3://{{ index .Values.dataUpload.buckets 0 }}/feast/registry.db
+    project: home_credit_default_risk
+    registry: s3://ml-data/feast/registry.db
     provider: local
-    entity_key_serialization_version: 2
-    # MinIO(S3 호환) 사용을 위해 엔드포인트 명시가 필요할 수 있음
-    s3_endpoint_url: http://minio:{{ .Values.infrastructure.minio.apiPort }}
+
+    # online_store:
+    #   type: sqlite
+    #   path: data/online_store.db
+
+    # Spark 설정
+    offline_store:
+      type: spark
+      spark_conf:
+        # MinIO(S3) 접속 설정
+        spark.hadoop.fs.s3a.endpoint: "http://minio:{{ .Values.infrastructure.minio.apiPort }}"
+        spark.hadoop.fs.s3a.access.key: "{{ .Values.infrastructure.minio.rootUser }}"
+        spark.hadoop.fs.s3a.secret.key: "{{ .Values.infrastructure.minio.rootPassword }}"
+        spark.hadoop.fs.s3a.path.style.access: "true"
+        spark.hadoop.fs.s3a.impl: "org.apache.hadoop.fs.s3a.S3AFileSystem"
+        spark.hadoop.fs.s3a.connection.ssl.enabled: "false"
+
+        # JAR 파일 경로 (Training Dockerfile에 다운로드 받은 경로와 일치시킴)
+        spark.driver.extraClassPath: "/opt/jars/hadoop-aws-3.3.4.jar:/opt/jars/aws-java-sdk-bundle-1.12.262.jar:/opt/jars/delta-spark_2.12-3.1.0.jar:/opt/jars/delta-storage-3.1.0.jar"
+        spark.executor.extraClassPath: "/opt/jars/hadoop-aws-3.3.4.jar:/opt/jars/aws-java-sdk-bundle-1.12.262.jar:/opt/jars/delta-spark_2.12-3.1.0.jar:/opt/jars/delta-storage-3.1.0.jar"
+
+        # Delta Lake 설정
+        spark.jars.packages: "io.delta:delta-spark_2.12:3.1.0"
+        spark.sql.extensions: "io.delta.sql.DeltaSparkSessionExtension"
+        spark.sql.catalog.spark_catalog: "org.apache.spark.sql.delta.catalog.DeltaCatalog"

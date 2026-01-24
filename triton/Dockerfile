@@ -2,10 +2,9 @@ FROM nvcr.io/nvidia/tritonserver:24.01-py3
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt --ignore-installed
+COPY triton /app
 
-COPY . .
+RUN pip install --no-cache-dir -r requirements.txt --ignore-installed
 
 RUN chmod +x entrypoint.sh
 

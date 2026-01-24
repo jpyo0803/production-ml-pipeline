@@ -9,7 +9,7 @@ build_and_push() {
   local dir=$2
   local tag="${REGISTRY}/${name}:latest"
   echo "Building and Pushing image: ${tag}..."
-  docker build -t "${tag}" "${dir}"
+  docker build -t "${tag}" -f "${dir}/Dockerfile" .
   docker push "${tag}"
 }
 

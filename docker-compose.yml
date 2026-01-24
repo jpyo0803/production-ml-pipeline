@@ -12,6 +12,7 @@ services:
     build:
       context: .
       dockerfile: ./feature_store/Dockerfile
+    container_name: feature-store
     depends_on:
       minio-init:
         condition: service_completed_successfully # MinIO 초기화 완료 후 시작
@@ -74,7 +75,9 @@ services:
 
   # MLflow Tracking Server
   mlflow:
-    build: ./mlflow
+    build:
+      context: .
+      dockerfile: ./mlflow/Dockerfile
     container_name: mlflow
     ports:
       - "5000:5000"
@@ -99,6 +102,7 @@ services:
     build:
       context: .
       dockerfile: ./training/Dockerfile
+    container_name: training
     depends_on:
       - feature-store
       - mlflow
@@ -116,7 +120,9 @@ services:
       MLFLOW_S3_ENDPOINT_URL: http://minio:9000
 
   triton:
-    build: ./triton
+    build:
+      context: .
+      dockerfile: ./triton/Dockerfile
     container_name: triton
     ports:
       - "8000:8000" # Triton HTTP
@@ -133,7 +139,9 @@ services:
       MLFLOW_S3_ENDPOINT_URL: http://minio:9000
       
   inference:
-    build: ./inference
+    build:
+      context: .
+      dockerfile: ./inference/Dockerfile
     container_name: inference
     ports:
       - "8080:8080" # FastAPI
@@ -148,7 +156,9 @@ services:
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
 
   log-worker:
-    build: ./log_worker
+    build:
+      context: .
+      dockerfile: ./log_worker/Dockerfile
     container_name: log-worker
     depends_on:
       - rabbitmq

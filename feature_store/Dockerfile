@@ -6,7 +6,7 @@ WORKDIR /app
 COPY common /app/common
 COPY ./feature_store .
 
-ENV PYTHONPATH="${PYTHONPATH}:/app"
+ENV PYTHONPATH="/app"
 
 # JAVA JRE 설치, PySpark 구동을 위해 필요
 RUN mkdir -p /usr/share/man/man1 && \
