@@ -16,7 +16,7 @@ spec:
       containers:
       - name: inference
         image: {{ .Values.images.inference | quote }}
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         ports:
         - containerPort: {{ .Values.inference.servicePort }}
         env:

@@ -16,7 +16,7 @@ spec:
       containers:
       - name: triton
         image: {{ .Values.images.triton | quote }}
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         ports:
         - containerPort: 8000
           name: http

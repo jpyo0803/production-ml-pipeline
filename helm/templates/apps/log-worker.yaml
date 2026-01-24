@@ -15,7 +15,7 @@ spec:
       containers:
       - name: log-worker
         image: {{ .Values.images.logWorker | quote }}
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         env:
         - name: RABBITMQ_URL
           value: "amqp://{{ .Values.infrastructure.rabbitmq.user }}:{{ .Values.infrastructure.rabbitmq.password }}@rabbitmq:{{ .Values.infrastructure.rabbitmq.port }}/"
