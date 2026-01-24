@@ -1,8 +1,11 @@
 import os
-import pandas as pd
-from datetime import datetime
 from feast import FeatureStore
 from sklearn.model_selection import train_test_split
+
+from pyspark.sql.functions import lit, to_timestamp
+from pyspark.sql import SparkSession
+
+import pandas as pd
 
 # Feast Repo 경로
 FEAST_REPO_PATH = os.environ.get("FEAST_REPO_PATH", "/app/feast_repo")
@@ -10,35 +13,41 @@ FEAST_REPO_PATH = os.environ.get("FEAST_REPO_PATH", "/app/feast_repo")
 # 학습에 사용될 Ground Truth 레이블 경로
 LABEL_URI = os.environ.get("LABEL_URI", "s3://ml-data/raw/application_train.csv")
 
-# S3 접근 정보 (Label 가져오기 용도)
-AWS_KEY = os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin")
-AWS_SECRET = os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin123")
-AWS_ENDPOINT = os.environ.get("AWS_ENDPOINT_URL", "http://minio:9000")
+def get_spark_session(app_name):
+    AWS_KEY = os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin")
+    AWS_SECRET = os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin123")
+    AWS_ENDPOINT = os.environ.get("AWS_ENDPOINT_URL", "http://minio:9000")
 
-# S3 접근 옵션 반환
-def s3_opts():
-    return {
-        "key": AWS_KEY,
-        "secret": AWS_SECRET,
-        "client_kwargs": {"endpoint_url": AWS_ENDPOINT},
-    }
+    # Dockerfile에서 다운로드 받은 JAR 파일들의 경로
+    jar_paths = "/opt/jars/hadoop-aws-3.3.4.jar:/opt/jars/aws-java-sdk-bundle-1.12.262.jar"
+
+    spark = SparkSession.builder \
+        .appName(app_name) \
+        .config("spark.driver.extraClassPath", jar_paths) \
+        .config("spark.executor.extraClassPath", jar_paths) \
+        .config("spark.hadoop.fs.s3a.endpoint", AWS_ENDPOINT) \
+        .config("spark.hadoop.fs.s3a.access.key", AWS_KEY) \
+        .config("spark.hadoop.fs.s3a.secret.key", AWS_SECRET) \
+        .config("spark.hadoop.fs.s3a.path.style.access", "true") \
+        .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
+        .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false") \
+        .config("spark.hadoop.fs.s3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
+        .getOrCreate()
+
+    return spark
 
 def load_dataset():
-    # 레이블 CSV 데이터 로드
-    labels = pd.read_csv(
-        LABEL_URI,
-        usecols=["SK_ID_CURR", "TARGET"],
-        storage_options=s3_opts(),
-    )
+    spark = get_spark_session("LoadDataset")
 
     # Feast 저장소에 연결
     store = FeatureStore(repo_path=FEAST_REPO_PATH)
 
+    # 레이블 CSV 데이터 로드
+    labels_spark_df = spark.read.csv(LABEL_URI, header=True, inferSchema=True).select("SK_ID_CURR", "TARGET")
+
     # Entity DataFrame 생성
-    entity_df = pd.DataFrame({
-        "SK_ID_CURR": labels["SK_ID_CURR"], # Label 데이터에 있는 ID 그대로 사용
-        "event_timestamp": [datetime(2018, 1, 1)] * len(labels) # 언제 시점의 feature를 가져올지 지정
-    })
+    entity_df = labels_spark_df.select("SK_ID_CURR") \
+        .withColumn("event_timestamp", to_timestamp(lit("2018-01-01"))).toPandas()
 
     # 가져올 feature 목록 정의
     features = [
@@ -58,17 +67,21 @@ def load_dataset():
     feat_df = store.get_historical_features(
         entity_df=entity_df,
         features=features,
-    ).to_df() # Pandas DataFrame 형태로 반환
+    ).to_df()
+
+    # Label을 Spark에서 Pandas로 변환
+    labels_pandas_df = labels_spark_df.toPandas()
 
     # feature DataFrame과 레이블을 SK_ID_CURR 기준으로 병합.
     # 결측치는 0.0으로 채움 (현실에서 결측치를 무엇으로 채울지는 도메인 지식에 따라 다름)
-    df = feat_df.merge(labels, on="SK_ID_CURR", how="inner").fillna(0.0)
+    df_pandas = pd.merge(feat_df, labels_pandas_df, on="SK_ID_CURR", how="inner").fillna(0.0)
+    # Spark 세션 종료
+    spark.stop()
 
     # 입력 X 준비 (불필요한 컬럼 제거)
-    X = df.drop(columns=["SK_ID_CURR", "event_timestamp", "TARGET"]).values
+    X = df_pandas.drop(columns=["TARGET", "event_timestamp", "SK_ID_CURR"], errors='ignore').values
     # 타겟 y 준비
-    y = df["TARGET"].values
-
+    y = df_pandas["TARGET"].values
     # 전체 데이터를 학습용 / 검증용으로 분할
     X_train, X_val, y_train, y_val = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=y

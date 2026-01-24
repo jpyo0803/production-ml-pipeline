@@ -1,6 +1,7 @@
 protobuf==4.25.3
 feast[aws]==0.40.1
 pandas
+pyspark==3.5.0
 pyarrow
 scikit-learn
 mlflow==2.9.2

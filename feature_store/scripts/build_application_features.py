@@ -3,61 +3,81 @@
 
     생성된 parquet 파일은 Feast (feature store)에서 사용됩니다.
 '''
-import os
-import pandas as pd
 
+import os
+from pyspark.sql.functions import lit, to_timestamp
+from pyspark.sql import SparkSession
+
+# S3에서 원본 데이터가 저장된 경로
 RAW_S3_PREFIX = os.environ.get("RAW_S3_PREFIX", "s3://ml-data/raw")
+# S3에 가공된 데이터를 저장할 경로
 PROCESSED_S3_PREFIX = os.environ.get("PROCESSED_S3_PREFIX", "s3://ml-data/processed")
 
-AWS_KEY = os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin")
-AWS_SECRET = os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin123")
-AWS_ENDPOINT = os.environ.get("AWS_ENDPOINT_URL", "http://minio:9000")
+def get_spark_session(app_name):
+    AWS_KEY = os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin")
+    AWS_SECRET = os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin123")
+    AWS_ENDPOINT = os.environ.get("AWS_ENDPOINT_URL", "http://minio:9000")
 
-USE_COLUMNS = [
-    "SK_ID_CURR",
-    "AMT_INCOME_TOTAL",
-    "AMT_CREDIT",
-    "AMT_ANNUITY",
-    "DAYS_BIRTH",
-    "DAYS_EMPLOYED",
-]
+    # Dockerfile에서 다운로드 받은 JAR 파일들의 경로
+    jar_paths = "/opt/jars/hadoop-aws-3.3.4.jar:/opt/jars/aws-java-sdk-bundle-1.12.262.jar"
 
-def s3_opts():
-    return {
-        "key": AWS_KEY,
-        "secret": AWS_SECRET,
-        "client_kwargs": {"endpoint_url": AWS_ENDPOINT},
-    }
-
-def load_csv(uri: str) -> pd.DataFrame:
-    return pd.read_csv(uri, usecols=USE_COLUMNS, storage_options=s3_opts())
+    spark = SparkSession.builder \
+        .appName(app_name) \
+        .config("spark.driver.extraClassPath", jar_paths) \
+        .config("spark.executor.extraClassPath", jar_paths) \
+        .config("spark.hadoop.fs.s3a.endpoint", AWS_ENDPOINT) \
+        .config("spark.hadoop.fs.s3a.access.key", AWS_KEY) \
+        .config("spark.hadoop.fs.s3a.secret.key", AWS_SECRET) \
+        .config("spark.hadoop.fs.s3a.path.style.access", "true") \
+        .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
+        .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false") \
+        .config("spark.hadoop.fs.s3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
+        .getOrCreate()
+    
+    return spark
 
 def main():
-    # Raw CSV 로드
+    spark = get_spark_session("BuildApplicationFeatures")
+
+    # Raw CSV 로드 (Spark는 필요한 데이터만 로드해 메모리 사용량 절감)
     train_uri = f"{RAW_S3_PREFIX}/application_train.csv"
     test_uri = f"{RAW_S3_PREFIX}/application_test.csv"
 
-    train_df = load_csv(train_uri)
-    test_df = load_csv(test_uri)
+    train_df = spark.read.csv(train_uri, header=True, inferSchema=True)
+    test_df = spark.read.csv(test_uri, header=True, inferSchema=True)
+
+    use_columns = [
+        "SK_ID_CURR",
+        "AMT_INCOME_TOTAL",
+        "AMT_CREDIT",
+        "AMT_ANNUITY",
+        "DAYS_BIRTH",
+        "DAYS_EMPLOYED",
+    ]
+
+    train_df = train_df.select(*use_columns)
+    test_df = test_df.select(*use_columns)
     print(f"[Success] Loaded application data from {train_uri} and {test_uri}")
 
-    df = pd.concat([train_df, test_df], axis=0, ignore_index=True)
+    # Train/Test 데이터 합치기
+    df = train_df.unionByName(test_df, allowMissingColumns=True)
 
     # 데이터 기준일 설정. 현재는 2018-01-01로 고정
-    df["event_timestamp"] = pd.Timestamp("2018-01-01")
-
+    df = df.withColumn("event_timestamp", to_timestamp(lit("2018-01-01")))
     # 가공된 데이터를 S3에 저장
     out_uri = f"{PROCESSED_S3_PREFIX}/application.parquet"
-    df.to_parquet(out_uri, index=False, storage_options=s3_opts())
+    df.write.mode("overwrite").parquet(out_uri)
     print(f"[Success] Saved application parquet to {out_uri}")
 
     # 로컬에도 복사본 저장 (Feast에서 사용하기 위함)
     local_dir = "/app/feast_repo/data/processed"
     os.makedirs(local_dir, exist_ok=True)
     local_path = f"{local_dir}/application.parquet"
-    df.to_parquet(local_path, index=False)
+    df.write.mode("overwrite").parquet(local_path)
 
     print(f"[Success] Copied application parquet to local path {local_path}")
+
+    spark.stop()
 
 if __name__ == "__main__":
     main()
