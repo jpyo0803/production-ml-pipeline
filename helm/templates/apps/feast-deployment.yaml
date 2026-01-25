@@ -34,13 +34,6 @@ spec:
           subPath: feature_store.yaml
         - name: feast-data
           mountPath: /app/feast_repo/data
-        command: ["/bin/sh", "-c"]
-        # registry.db 파일이 생성될 때까지 대기 후 서빙 시작
-        args:
-          - |
-            echo "Starting Feast Server with S3 Registry..."
-            cd /app/feast_repo && feast apply
-            cd /app/feast_repo && feast serve -p {{ .Values.featureStore.registryPort }} -h 0.0.0.0
       volumes:
       - name: feast-repo-config
         configMap:

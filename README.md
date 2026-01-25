@@ -38,7 +38,7 @@
 2. **비용 효율적 성능 최적화**: Triton Model Analyzer를 통해 하드웨어 제한 내 최적의 처리량(Throughput)을 내는 'Golden Config' 도출
 3. **선형적 확장성 구현**: 최적화된 단일 Pod를 기반으로 클러스터 부하에 따라 유연하게 대응하는 선형적 확장 체계 구축
 4. **인프라의 코드화(IaC) 및 자동화**: Helm과 ArgoCD를 활용하여 배포 과정을 표준화하고 Git 기반의 지속적 배포(CD) 실현
-5. **대용량 데이터 처리 역량 확보**: **PySpark**를 도입하여 메모리 한계(OOM)를 극복하고, GB~TB 단위의 데이터도 안정적으로 처리할 수 있는 분산 처리 환경 구축
+5. **데이터 레이크하우스(Lakehouse) 구축**: **Apache Spark**와 **Delta Lake**를 결합하여, 대용량 데이터 처리 능력뿐만 아니라 **ACID 트랜젝션** 보장, **스키마 강제(Schema Enforcement)**, 그리고 과거 데이터 시점으로 복원 가능한 **Time Travel** 기능을 갖춘 신뢰성 높은 데이터 파이프라인 구축
 
 ### 시스템 아키텍처
 ![Overview](images/overview.png)
@@ -51,7 +51,7 @@
 
 ### 핵심 기술 스택
 - **Infrastructure**: Kubernetes, Docker, Helm, ArgoCD, RabbitMQ
-- **Data/Feature**: Feast, MinIO (S3), PostgreSQL, PySpark (Distributed ETL)
+- **Data/Feature**: Feast, MinIO (S3), PostgreSQL, PySpark (Distributed ETL), Delta Lake (Storage Layer)
 - **Model Serving**: NVIDIA Triton Inference Server, FastAPI, Model Analyzer
 - **ML Lifecycle**: MLflow (Tracking & Registry)
 - **Observability**: Prometheus, Grafana
@@ -60,7 +60,9 @@
 이 시스템은 데이터 소스로부터 추론 서비스까지 총 3단계의 파이프라인으로 구성됩니다.
 
 ### Data & Feature Pipeline (준비 단계)
-- **Distributed ETL (PySpark)**: 원천 데이터(CSV)가 대용량일 경우 단일 프로세스(일반적으로 Pandas)로는 처리가 불가능합니다. 본 프로젝트는 Spark Cluster(Local Mode)를 활용하여 데이터를 분산 로드하고, 집계(Aggregation) 및 조인 연산을 수행한 뒤 Parquet 포맷으로 최적화하여 MinIO(S3)에 저장합니다.
+- **Distributed ETL (PySpark & Delta Lake):**
+  - **Spark Cluster 적용**: 원천 데이터(CSV)가 대용량일 경우 단일 프로세스로는 처리가 불가능합니다. 본 프로젝트에서는 Spark Cluster를 활용하여 데이터를 분산 처리합니다.
+  - **Delta Lake 포맷 적용**: 단순 Parquet 파일 저장 방식의 한계(Data corruption, Immutability)를 극복하기 위해 Delta Lake를 도입했습니다. 이를 통해 **ACID 트랜잭션**을 보장하여 쓰기 작업 실패 시 데이터가 깨지는 것을 방지하고, **Time Travel** 기능을 통해 데이터 변경 이력 추적을 가능하게 합니다.
 - **S3 Connectivity**: Hadoop-AWS 라이브러리(```s3a://```)를 통해 Spark가 S3 객체 스토리지에 직접 접근하여 고속으로 데이터를 읽고 씁니다.
 - **Feature Management (Feast)**: Spark로 정제된 Parquet 파일을 기반으로 FeatureView를 정의합니다. 학습과 추론에 공통으로 사용될 데이터를 표준화하여 관리합니다.
 
@@ -87,6 +89,7 @@
 4. **Artifact & Metadata 분리**: 무거운 모델은 S3(MinIO)에, 가벼운 이력 정보는 RDB(Postgres)에 저장하여 데이터 처리 효율과 쿼리 성능을 모두 잡기위함 입니다.
 5. **Feature Store 도입**: 학습시 사용한 Feature 계산 로직을 추론 시에도 그대로 재사용하여 **Training-Serving Skew** 문제를 차단하기위함 입니다.
 6. **대용량 분산 처리 도입 (PySpark)**: 데이터 수집 및 전처리(ETL) 단계에 **Apache Spark**를 도입하여, 단일 머신의 메모리를 초과하는 대용량 데이터셋도 안정적으로 처리할 수 있는 **분산 데이터 파이프라인**을 구축했습니다. S3(MinIO)와 Spark를 연동하여 I/O 병목을 최소화했으며, Parquet 포맷을 활용해 스토리지 효율성을 극대화했습니다.
+7. **데이터 무결성 및 버전 관리 (Delta Lake)**: MLOps에서 데이터 버전 관리는 모델 버전 관리만큼 중요합니다. Delta Lake를 도입함으로써 데이터 파이프라인의 **중간 실패에 대한 원자성(Atomicity)**를 보장하고, 필요시 과거 특정 시점의 데이터 스냅샷을 조회할 수 있도록 설계하였습니다. 
 
 ## 4. 성능 최적화 전략 (Performance Optimization)
 본 프로젝트는 추론 시스템의 효율성을 극대화하기 위해 **수직적 최적화(Vertical)** 와 **수평적 확장(Horizontal)** 을 결합한 2단계 전략을 취합니다. 자세한 사용 방법은 [benchmarks/triton_analysis/README.md](./benchmarks/triton_analysis/README.md) 를 참조바랍니다.

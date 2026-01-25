@@ -53,18 +53,6 @@ spec:
         volumeMounts:
         - name: feast-data
           mountPath: /app/feast_repo/data
-        command:
-        - /bin/sh
-        - -c
-        - |
-          # mc 대기 로직이 빠지고 바로 본 작업 시작
-          echo "[Feature Store] Running ETL Scripts..."
-          python scripts/build_application_features.py
-          python scripts/build_bureau_features.py
-          
-          echo "[Feature Store] Applying Feast Registry..."
-          cd feast_repo
-          feast apply
       volumes:
       - name: feast-data
         persistentVolumeClaim:
