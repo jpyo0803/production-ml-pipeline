@@ -119,7 +119,7 @@ services:
       - feature-store
       - mlflow
     environment:
-      FEAST_REPO_PATH: /app/feast_repo
+      FEAST_REPO_PATH: /feast_repo
       MLFLOW_TRACKING_URI: http://mlflow:5000
 
       # labels도 S3에서 읽게 변경

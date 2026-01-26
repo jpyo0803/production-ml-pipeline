@@ -3,11 +3,12 @@ FROM python:3.10-slim
 WORKDIR /app
 
 # 모듈 복사
-COPY common /app/common
-COPY training /app
-COPY feature_store/feast_repo /app/feast_repo
+COPY common /common
+COPY feature_store/feast_repo /feast_repo
 
-ENV PYTHONPATH="/app"
+COPY training /app
+
+ENV PYTHONPATH="/"
 
 # JAVA JRE 설치, PySpark 구동을 위해 필요
 RUN mkdir -p /usr/share/man/man1 && \
