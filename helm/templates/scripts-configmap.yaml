@@ -3,9 +3,8 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ .Release.Name }}-upload-script
-  labels:
-    app: data-uploader
+  name: data-uploader-script
+  namespace: {{ .Values.global.namespace }}
 data:
   upload.sh: |
       #!/bin/sh

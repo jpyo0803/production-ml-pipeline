@@ -4,7 +4,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: triton-servicemonitor
-  namespace: production-ml-pipeline
+  namespace: {{ .Values.global.namespace }}
   labels:
     # 아까 Prometheus 설치 시 사용한 release 이름과 일치해야 합니다.
     release: obs 

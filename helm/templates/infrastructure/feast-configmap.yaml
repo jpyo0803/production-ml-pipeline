@@ -3,14 +3,14 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: feast-repo 
-  labels:
-    app: feast-feature-store
+  name: feast-repo-config
+  namespace: {{ .Values.global.namespace }}
 data:
   feature_store.yaml: |
     project: home_credit_default_risk
     registry: s3://ml-data/feast/registry.db
     provider: local
+    entity_key_serialization_version: 2
 
     # online_store:
     #   type: sqlite

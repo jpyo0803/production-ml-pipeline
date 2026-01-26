@@ -1,13 +1,14 @@
-# -- helm/templates/jobs/data-uploader.yaml
+# -- helm/templates/jobs/data-uploader-job.yaml
 
 {{- if eq .Values.dataUpload.enabled true }}
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ .Release.Name }}-data-uploader
+  name: data-uploader-job
+  namespace: {{ .Values.global.namespace }}
   annotations:
     "helm.sh/hook": post-install # 설치 후에 실행되는 훅
-    "helm.sh/hook-weight": "1" # 실행 순서 지실정 (낮을수록 먼저 실행)
+    "helm.sh/hook-weight": "1" # 실행 순서 지정 (낮을수록 먼저 실행)
     "helm.sh/hook-delete-policy": before-hook-creation # 재설치 시 이전 훅 삭제
 spec:
   template:
@@ -15,14 +16,16 @@ spec:
       restartPolicy: OnFailure
       # MinIO 준비 대기 및 버킷 생성
       initContainers:
-      - name: wait-for-minio-and-create-buckets
+      - name: wait-for-minio
         image: {{ .Values.images.minioMc | quote }}
         command:
         - /bin/sh
         - -c
         - |
-          echo "Waiting for MinIO..."
-          until mc alias set myminio http://minio:{{ .Values.infrastructure.minio.apiPort }} {{ .Values.infrastructure.minio.rootUser }} {{ .Values.infrastructure.minio.rootPassword }}; do
+          echo "Connecting to MinIO..."
+          # MinIO 접속 시도 (성공할 때까지 반복)
+          until mc alias set myminio $AWS_ENDPOINT_URL $AWS_ACCESS_KEY_ID $AWS_SECRET_ACCESS_KEY; do
+            echo "Waiting for MinIO..."
             sleep 2
           done
           
@@ -31,6 +34,9 @@ spec:
           mc mb myminio/{{ . }} --ignore-existing
           {{- end }}
           echo "MinIO ready and buckets created."
+        env:
+        # 공통 MinIO 환경 변수 주입
+        {{- include "common.env.minio" . | nindent 8 }}
 
       containers:
       - name: uploader
@@ -44,7 +50,7 @@ spec:
       volumes:
       - name: script-vol
         configMap:
-          name: {{ .Release.Name }}-upload-script
+          name: data-uploader-script
       - name: data-vol
         hostPath:
           path: {{ .Values.dataUpload.hostPath | quote }} # csv 파일이 위치한 호스트 경로

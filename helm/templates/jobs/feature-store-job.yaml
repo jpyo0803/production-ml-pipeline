@@ -3,7 +3,8 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ .Release.Name }}-feature-store-init
+  name: feature-store-init-job
+  namespace: {{ .Values.global.namespace }}
   annotations:
     "helm.sh/hook": post-install # 설치 후에 실행되는 훅
     "helm.sh/hook-weight": "2" # 데이터 업로더 작업 후에 실행 (데이터 업로더는 "1"로 설정) 
@@ -40,21 +41,8 @@ spec:
           value: {{ .Values.featureStore.rawS3Prefix | quote }}
         - name: PROCESSED_S3_PREFIX
           value: {{ .Values.featureStore.processedS3Prefix | quote }}
-
-        # MinIO/S3 접속 정보 (boto3 용)
-        - name: AWS_ACCESS_KEY_ID
-          value: {{ .Values.infrastructure.minio.rootUser | quote }}
-        - name: AWS_SECRET_ACCESS_KEY
-          value: {{ .Values.infrastructure.minio.rootPassword | quote }}
-        - name: AWS_DEFAULT_REGION
-          value: {{ .Values.featureStore.s3Region | quote }}
-        - name: AWS_ENDPOINT_URL
-          value: {{ .Values.featureStore.s3Endpoint | quote }}
-
-        # Feast가 사용할 S3 엔드포인트
-        - name: FEAST_S3_ENDPOINT_URL
-          value: {{ .Values.featureStore.s3Endpoint | quote }}
-
+        # 공통 MinIO 환경 변수 주입
+        {{- include "common.env.minio" . | nindent 8 }}
         volumeMounts:
         - name: feast-repo-config
           mountPath: /app/feast_repo/feature_store.yaml
@@ -65,7 +53,7 @@ spec:
       volumes:
       - name: feast-repo-config
         configMap:
-          name: feast-repo
+          name: feast-repo-config
       - name: feast-data
         persistentVolumeClaim:
           claimName: feast-registry-pvc

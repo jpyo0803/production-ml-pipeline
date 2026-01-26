@@ -1,9 +1,10 @@
-# -- helm/templates/apps/feast-deployment.yaml
+# -- helm/templates/apps/feast.yaml
 
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: feast-server
+  namespace: {{ .Values.global.namespace }}
 spec:
   replicas: 1
   selector:
@@ -14,26 +15,40 @@ spec:
       labels:
         app: feast-server
     spec:
+      initContainers:
+      # 버킷 생성용 Init Container
+      - name: wait-for-minio
+        image: {{ .Values.images.minioMc | quote }}
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Connecting to MinIO..."
+          # MinIO 접속 시도 (성공할 때까지 반복)
+          until mc alias set myminio $AWS_ENDPOINT_URL $AWS_ACCESS_KEY_ID $AWS_SECRET_ACCESS_KEY; do
+            echo "Waiting for MinIO..."
+            sleep 2
+          done
+          
+          echo "MinIO connected. Creating buckets..."
+          # 버킷 생성 (이미 존재하면 --ignore-existing 옵션 덕분에 에러 없이 넘어감)
+          mc mb myminio/ml-data --ignore-existing
+          
+          echo "Bucket 'ml-data' is ready!"
+        env:
+        # 공통 MinIO 환경 변수 주입
+        {{- include "common.env.minio" . | nindent 8 }}
       containers:
       - name: feast
         image: {{ .Values.images.featureStore | quote }}
-
         workingDir: /app/feast_repo
-
         command: ["feast", "serve"]
         args: ["--host", "0.0.0.0", "--port", "{{ .Values.featureStore.registryPort }}"]
-
         env:
         - name: FEAST_REPO_PATH
           value : "/app/feast_repo"
-        - name: AWS_ACCESS_KEY_ID
-          value: {{ .Values.infrastructure.minio.rootUser | quote }}
-        - name: AWS_SECRET_ACCESS_KEY
-          value: {{ .Values.infrastructure.minio.rootPassword | quote }}
-        - name: FEAST_S3_ENDPOINT_URL
-          value: {{ .Values.featureStore.s3Endpoint | quote }}
-        - name: AWS_ENDPOINT_URL
-          value: {{ .Values.featureStore.s3Endpoint | quote }}
+        # 공통 MinIO 환경 변수 주입
+        {{- include "common.env.minio" . | nindent 8 }}
         ports:
         - containerPort: {{ .Values.featureStore.registryPort }}
         volumeMounts:
@@ -45,7 +60,7 @@ spec:
       volumes:
       - name: feast-repo-config
         configMap:
-          name: feast-repo
+          name: feast-repo-config
       - name: feast-data 
         persistentVolumeClaim:
           claimName: feast-registry-pvc

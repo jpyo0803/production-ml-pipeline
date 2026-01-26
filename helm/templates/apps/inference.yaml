@@ -4,6 +4,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: inference
+  namespace: {{ .Values.global.namespace }}
 spec:
   # replicas: 1
   # 포드 수는 hpa.yaml에서 정의한 minReplicas 및 maxReplicas에 의해 관리됩니다.
@@ -27,14 +28,11 @@ spec:
         - name: TRITON_PORT
           value: "8000"
         - name: MODEL_NAME
-          value: "HomeCreditDefaultModel"
-        - name: RABBITMQ_URL
-          value: "amqp://{{ .Values.infrastructure.rabbitmq.user }}:{{ .Values.infrastructure.rabbitmq.password }}@rabbitmq:{{ .Values.infrastructure.rabbitmq.port }}/"
-        - name: QUEUE_NAME
-          value: {{ .Values.inference.queueName | quote }}
-          
+          value: {{ .Values.triton.modelName | quote }}
         - name: PYTHONUNBUFFERED
           value: "1"
+        # 공통 RabbitMQ 환경 변수 주입
+        {{- include "common.env.rabbitmq" . | nindent 8 }}
         resources:
           requests:
             cpu: "500m"     # 이 값을 기준으로 70%(HPA 설정값)를 계산
@@ -47,6 +45,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: inference
+  namespace: {{ .Values.global.namespace }}
   labels:
     app: inference # ServiceMonitor가 이 라벨을 사용하여 서비스를 찾음
 spec:

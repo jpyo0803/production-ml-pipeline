@@ -3,7 +3,8 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ .Release.Name }}-training
+  name: training-job
+  namespace: {{ .Values.global.namespace }}
   annotations:
     # 최초 배포 및 이후 배포 시 모두 실행
     "helm.sh/hook": post-install,post-upgrade
@@ -38,27 +39,12 @@ spec:
           env:
           - name: FEAST_REPO_PATH
             value: "/feast_repo"
-
           - name: LABEL_URI
             value: "s3://ml-data/raw/application_train.csv"
-            
           - name: MLFLOW_TRACKING_URI
             value: "http://mlflow:{{ .Values.mlflow.servicePort }}"
-          
-          # S3(MinIO) 접속을 위한 필수 환경 변수
-          - name: AWS_ACCESS_KEY_ID
-            value: {{ .Values.infrastructure.minio.rootUser | quote }}
-          - name: AWS_SECRET_ACCESS_KEY
-            value: {{ .Values.infrastructure.minio.rootPassword | quote }}
-          - name: AWS_DEFAULT_REGION
-            value: {{ .Values.featureStore.s3Region | quote }}
-          - name: FEAST_S3_ENDPOINT_URL
-            value: "http://minio:{{ .Values.infrastructure.minio.apiPort }}"
-          - name: AWS_ENDPOINT_URL
-            value: "http://minio:{{ .Values.infrastructure.minio.apiPort }}"
-          - name: MLFLOW_S3_ENDPOINT_URL
-            value: "http://minio:{{ .Values.infrastructure.minio.apiPort }}"
-          
+          # 공통 MinIO 환경 변수 주입
+          {{- include "common.env.minio" . | nindent 10 }}
           volumeMounts:
           - name: feast-repo-config
             mountPath: /feast_repo/feature_store.yaml
@@ -68,7 +54,7 @@ spec:
       volumes:
       - name: feast-repo-config
         configMap:
-          name: feast-repo
+          name: feast-repo-config
       - name: feast-data
         persistentVolumeClaim:
           claimName: feast-registry-pvc

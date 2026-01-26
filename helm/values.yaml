@@ -49,11 +49,19 @@ infrastructure:
 mlflow:
   servicePort: 5000
 
+# Feature Store 설정
+featureStore:
+  registryPort: 6566
+  registryStorageSize: "1Gi"
+  s3Endpoint: "http://minio:9000"
+  s3Region: "us-east-1"
+  rawS3Prefix: "s3://ml-data/raw"
+  processedS3Prefix: "s3://ml-data/processed"
+
 # 추론 서비스 설정
 inference:
   servicePort: 8080
   nodePort: 30080
-  replicaCount: 2
   queueName: "inference_logs"
   hpa:
     enabled: true
@@ -80,7 +88,6 @@ triton:
   modelAlias: "prod"
   httpPort: 8000
   metricsPort: 8002
-  replicaCount: 1
   hpa:
     enabled: false
     minReplicas: 1
@@ -99,12 +106,3 @@ dataUpload:
     - inference-logs
   rawPath: "raw"
 
-# Feature Store 설정
-featureStore:
-  registryPort: 6566
-  initProcessing: true # 초기 raw 데이터 전처리 여부
-  registryStorageSize: "1Gi"
-  s3Endpoint: "http://minio:9000"
-  s3Region: "us-east-1"
-  rawS3Prefix: "s3://ml-data/raw"
-  processedS3Prefix: "s3://ml-data/processed"
