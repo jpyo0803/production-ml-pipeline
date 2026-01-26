@@ -1,3 +1,5 @@
+# -- helm/templates/scripts-configmap.yaml
+
 apiVersion: v1
 kind: ConfigMap
 metadata:

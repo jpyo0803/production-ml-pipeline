@@ -1,3 +1,5 @@
+# -- helm/templates/infrastructure/minio.yaml
+
 # PersistentVolumeClaim for MinIO storage
 apiVersion: v1
 kind: PersistentVolumeClaim
