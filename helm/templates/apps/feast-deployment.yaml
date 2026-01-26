@@ -15,6 +15,12 @@ spec:
       containers:
       - name: feast
         image: {{ .Values.images.featureStore | quote }}
+
+        workingDir: /app/feast_repo
+
+        command: ["feast", "serve"]
+        args: ["--host", "0.0.0.0", "--port", "{{ .Values.featureStore.registryPort }}"]
+
         env:
         - name: FEAST_REPO_PATH
           value : "/app/feast_repo"

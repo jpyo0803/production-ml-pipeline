@@ -103,5 +103,6 @@ featureStore:
   initProcessing: true # 초기 raw 데이터 전처리 여부
   registryStorageSize: "1Gi"
   s3Endpoint: "http://minio:9000"
+  s3Region: "us-east-1"
   rawS3Prefix: "s3://ml-data/raw"
   processedS3Prefix: "s3://ml-data/processed"

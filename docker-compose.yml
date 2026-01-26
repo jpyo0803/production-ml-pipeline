@@ -15,9 +15,7 @@ services:
     container_name: feature-store
     depends_on:
       minio-init:
-        condition: service_completed_successfully # MinIO 초기화 완료 후 시작
-    volumes:
-      - ./feature_store/feast_repo:/app/feast_repo
+        condition: service_completed_successfully # MinIO 초기화 완료 후 시작 
     environment:
       RAW_S3_PREFIX: s3://ml-data/raw # 원시 데이터 위치
       PROCESSED_S3_PREFIX: s3://ml-data/processed # 가공된 데이터 위치
@@ -28,6 +26,20 @@ services:
       AWS_SECRET_ACCESS_KEY: minioadmin123
       AWS_DEFAULT_REGION: us-east-1
       AWS_ENDPOINT_URL: http://minio:9000
+
+    command: >
+      bash -c "
+        echo '[Feature Store] ETL: application features' &&
+        python /app/scripts/build_application_features.py &&
+        echo '[Feature Store] ETL: bureau features' &&
+        python /app/scripts/build_bureau_features.py &&
+        echo '[Feature Store] Feast apply' &&
+        cd /app/feast_repo &&
+        feast apply &&
+        echo '[Feature Store] Feast materialize' &&
+        feast materialize-incremental $$(date +%Y-%m-%d) &&
+        echo '[Feature Store] Ready'
+      "
 
   # MinIO (S3 호환 오브젝트 스토리지)
   minio:

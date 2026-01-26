@@ -43,6 +43,8 @@ spec:
             value: {{ .Values.infrastructure.minio.rootUser | quote }}
           - name: AWS_SECRET_ACCESS_KEY
             value: {{ .Values.infrastructure.minio.rootPassword | quote }}
+          - name: AWS_DEFAULT_REGION
+            value: {{ .Values.featureStore.s3Region | quote }}
           - name: FEAST_S3_ENDPOINT_URL
             value: "http://minio:{{ .Values.infrastructure.minio.apiPort }}"
           - name: AWS_ENDPOINT_URL

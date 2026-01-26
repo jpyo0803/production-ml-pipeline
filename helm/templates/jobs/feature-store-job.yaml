@@ -9,51 +9,61 @@ spec:
   template:
     spec:
       restartPolicy: Never
-      # MinIO가 준비될 때까지 대기하는 로직 추가
-      initContainers:
-      - name: wait-for-minio
-        image: {{ .Values.images.minioMc | quote }}
-        command:
-        - /bin/sh
-        - -c
-        - |
-          echo "Waiting for MinIO..."
-
-          until mc alias set myminio http://minio:{{ .Values.infrastructure.minio.apiPort }} {{ .Values.infrastructure.minio.rootUser }} {{ .Values.infrastructure.minio.rootPassword }}; do
-            sleep 2
-          done
-
-          echo "Creating buckets from list..."
-          {{- range .Values.dataUpload.buckets }}
-          mc mb myminio/{{ . }} || true
-          {{- end }}
-          
-          echo "All buckets checked/created."
       containers:
       - name: feature-store-etl
         image: {{ .Values.images.featureStore | quote }}
+        workingDir: /app/feast_repo
+        # Feature Store ETL 작업 실행
+        command:
+        - /bin/bash
+        - -c
+        - |
+          echo "[Feature Store] ETL: application features" &&
+          python /app/scripts/build_application_features.py &&
+          
+          echo "[Feature Store] ETL: bureau features" &&
+          python /app/scripts/build_bureau_features.py &&
+          
+          echo "[Feature Store] Feast apply" &&
+          cd /app/feast_repo &&
+          feast apply &&
+          
+          echo "[Feature Store] Feast materialize" &&
+          feast materialize-incremental $(date +%Y-%m-%d) &&
+          
+          echo "[Feature Store] Ready"
+
         env:
         - name: RAW_S3_PREFIX
           value: {{ .Values.featureStore.rawS3Prefix | quote }}
         - name: PROCESSED_S3_PREFIX
           value: {{ .Values.featureStore.processedS3Prefix | quote }}
-        # Feast/Boto3 표준 환경 변수명으로 변경
+
+        # MinIO/S3 접속 정보 (boto3 용)
         - name: AWS_ACCESS_KEY_ID
           value: {{ .Values.infrastructure.minio.rootUser | quote }}
         - name: AWS_SECRET_ACCESS_KEY
           value: {{ .Values.infrastructure.minio.rootPassword | quote }}
-        # 기존 스크립트에서 혹시 사용할지 모르니 유지 (선택)
-        - name: MINIO_ACCESS_KEY
-          value: {{ .Values.infrastructure.minio.rootUser | quote }}
-        - name: MINIO_SECRET_KEY
-          value: {{ .Values.infrastructure.minio.rootPassword | quote }}
-        # S3 Endpoint 설정 (MinIO 사용 시 필수)
+        - name: AWS_DEFAULT_REGION
+          value: {{ .Values.featureStore.s3Region | quote }}
+        - name: AWS_ENDPOINT_URL
+          value: {{ .Values.featureStore.s3Endpoint | quote }}
+
+        # Feast가 사용할 S3 엔드포인트
         - name: FEAST_S3_ENDPOINT_URL
           value: {{ .Values.featureStore.s3Endpoint | quote }}
+
         volumeMounts:
+        - name: feast-repo-config
+          mountPath: /app/feast_repo/feature_store.yaml
+          subPath: feature_store.yaml
         - name: feast-data
           mountPath: /app/feast_repo/data
+
       volumes:
+      - name: feast-repo-config
+        configMap:
+          name: feast-repo
       - name: feast-data
         persistentVolumeClaim:
           claimName: feast-registry-pvc

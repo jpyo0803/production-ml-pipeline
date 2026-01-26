@@ -11,9 +11,28 @@ spec:
   template:
     spec:
       restartPolicy: OnFailure
+      # MinIO 준비 대기 및 버킷 생성
+      initContainers:
+      - name: wait-for-minio-and-create-buckets
+        image: {{ .Values.images.minioMc | quote }}
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Waiting for MinIO..."
+          until mc alias set myminio http://minio:{{ .Values.infrastructure.minio.apiPort }} {{ .Values.infrastructure.minio.rootUser }} {{ .Values.infrastructure.minio.rootPassword }}; do
+            sleep 2
+          done
+          
+          echo "Creating buckets..."
+          {{- range .Values.dataUpload.buckets }}
+          mc mb myminio/{{ . }} --ignore-existing
+          {{- end }}
+          echo "MinIO ready and buckets created."
+
       containers:
       - name: uploader
-        image: {{ .Values.images.minioMc }}
+        image: {{ .Values.images.minioMc | quote }}
         command: ["/bin/sh", "/scripts/upload.sh"]
         volumeMounts:
         - name: script-vol
@@ -26,6 +45,6 @@ spec:
           name: {{ .Release.Name }}-upload-script
       - name: data-vol
         hostPath:
-          path: {{ .Values.dataUpload.hostPath }} # csv 파일이 위치한 호스트 경로
+          path: {{ .Values.dataUpload.hostPath | quote }} # csv 파일이 위치한 호스트 경로
           type: Directory
 {{- end }}
