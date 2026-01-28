@@ -76,8 +76,8 @@
 ### Inference & Serving (추론 및 피드백 단계)
 - **Model Loading**: ```triton``` 컨테이너가 실행될 때 MLflow로부터 특정 버전(현재는 가장 최신버전)의 모델과 설정을 자동으로 다운로드하여 로드합니다.
 - **Serving Hierarchy**:
-  - **FastAPI (BFF)**: 외부 요청을 수신하고, Feast 온라인 스토어에서 필요한 Feature를 추출한 뒤 Triton으로 전달합니다.
-  - **Triton Inference Server**: 고성능 엔진을 통해 실제 추론을 수행합니다.
+  - **FastAPI (BFF)**: 외부(Client)로부터 HTTP 요청을 수신하고, (필요시 Feast 온라인 스토어에서 필요한 Feature를 추출합니다). 이후 **gRPC 프로토콜**을 사용하여 Triton Inference Server로 데이터를 고속으로 전달합니다.
+  - **Triton Inference Server**: **gRPC**로 수신된 데이터를 기반으로 고성능 엔진을 통해 실제 추론을 수행하고 결과를 반환합니다.
   - **Asynchronous Logging (Feedback Loop):**
     - **RabbitMQ (Message Broker)**: FastAPI는 추론 결과를 응답함과 동시에 로그 데이터를 RabbitMQ의 Queue로 비동기 전송(Fire-and-Forget)합니다. 이를 통해 로깅 I/O가 추론 Latency에 영향을 주지 않도록 격리했습니다.
     - **Log Worker**: 별도의 Worker Pod이 큐에서 메세를를지르 소비하여 MinIO에 배치(Batch) 단위로 저장합니다. 이는 향후 모델 재학습 및 데이터 드리프트 분석의 기초자료로 활용됩니다.
@@ -89,7 +89,8 @@
 4. **Artifact & Metadata 분리**: 무거운 모델은 S3(MinIO)에, 가벼운 이력 정보는 RDB(Postgres)에 저장하여 데이터 처리 효율과 쿼리 성능을 모두 잡기위함 입니다.
 5. **Feature Store 도입**: 학습시 사용한 Feature 계산 로직을 추론 시에도 그대로 재사용하여 **Training-Serving Skew** 문제를 차단하기위함 입니다.
 6. **대용량 분산 처리 도입 (PySpark)**: 데이터 수집 및 전처리(ETL) 단계에 **Apache Spark**를 도입하여, 단일 머신의 메모리를 초과하는 대용량 데이터셋도 안정적으로 처리할 수 있는 **분산 데이터 파이프라인**을 구축했습니다. S3(MinIO)와 Spark를 연동하여 I/O 병목을 최소화했으며, Parquet 포맷을 활용해 스토리지 효율성을 극대화했습니다.
-7. **데이터 무결성 및 버전 관리 (Delta Lake)**: MLOps에서 데이터 버전 관리는 모델 버전 관리만큼 중요합니다. Delta Lake를 도입함으로써 데이터 파이프라인의 **중간 실패에 대한 원자성(Atomicity)**를 보장하고, 필요시 과거 특정 시점의 데이터 스냅샷을 조회할 수 있도록 설계하였습니다. 
+7. **데이터 무결성 및 버전 관리 (Delta Lake)**: MLOps에서 데이터 버전 관리는 모델 버전 관리만큼 중요합니다. Delta Lake를 도입함으로써 데이터 파이프라인의 **중간 실패에 대한 원자성(Atomicity)**를 보장하고, 필요시 과거 특정 시점의 데이터 스냅샷을 조회할 수 있도록 설계하였습니다.
+8. **gRPC 기반 내부 통신**: 내부망(FastAPI <-> Triton) 통신에는 HTTP 대신 **gRPC**를 적용했습니다. Protobuf 기반의 바이너리 통신을 통해 대용량 데이터 전송 시 직렬화/역직렬화 오버헤드를 줄여 처리량(Throughput)을 극대화합니다.
 
 ## 4. 성능 최적화 전략 (Performance Optimization)
 본 프로젝트는 추론 시스템의 효율성을 극대화하기 위해 **수직적 최적화(Vertical)** 와 **수평적 확장(Horizontal)** 을 결합한 2단계 전략을 취합니다. 자세한 사용 방법은 [benchmarks/triton_analysis/README.md](./benchmarks/triton_analysis/README.md) 를 참조바랍니다.
