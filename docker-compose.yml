@@ -162,7 +162,7 @@ services:
       - rabbitmq
     environment:
       TRITON_HOST: triton
-      TRITON_PORT: "8000"
+      TRITON_PORT: "8001"
       MODEL_NAME: HomeCreditDefaultModel
 
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/

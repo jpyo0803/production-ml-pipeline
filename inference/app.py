@@ -1,24 +1,24 @@
-from flask import json
-import httpx
 import numpy as np
 from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import List, Dict, Any
 from datetime import datetime
-
+import json
 import os
 
 import aio_pika
 
+import tritonclient.grpc.aio as grpcclient
+from tritonclient.utils import InferenceServerException
+
 from prometheus_fastapi_instrumentator import Instrumentator
 
-TRITON_HOST = os.getenv("TRITON_HOST", "localhost")
-TRITON_PORT = os.getenv("TRITON_PORT", "8000")
+TRITON_PORT = os.getenv("TRITON_PORT", "8001")
 MODEL_NAME = os.getenv("MODEL_NAME", "HomeCreditDefaultModel")
 
 # 실제 추론 요청을 보낼 Triton Inference Server의 전체 URL
-TRITON_URL = f"http://{TRITON_HOST}:{TRITON_PORT}/v2/models/{MODEL_NAME}/infer"
-print(f"Triton Inference URL: {TRITON_URL}")
+TRITON_GRPC_URL = f"triton:{TRITON_PORT}"
+print(f"Triton Inference URL: {TRITON_GRPC_URL}")
 
 # RabbitMQ 설정
 RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
@@ -31,9 +31,6 @@ print(f"RabbitMQ URL: {RABBITMQ_URL}, Queue Name: {QUEUE_NAME}")
 # API 서버 인스턴스 생인
 app = FastAPI(title="Home Credit Default Inference API with Triton")
 print("FastAPI app created.")
-
-# 비동기 HTTP 클라이언트 생성 (재사용)
-http_client = httpx.AsyncClient(timeout=10.0)
 
 # 앱 시작 시 메트릭 측정 및 /metrics 엔드포인트 자동 생성
 Instrumentator().instrument(app).expose(app, endpoint="/metrics")
@@ -88,8 +85,6 @@ async def startup_event():
 # 앱 종료 시 클라이언트 리소스 정리
 @app.on_event("shutdown")
 async def shutdown_event():
-    await http_client.aclose()
-    print("HTTP client closed.")
     if mq_connection:
         await mq_connection.close()
         print("RabbitMQ connection closed.")
@@ -103,30 +98,45 @@ def to_tensor(reqs: List[PredictionRequest]) -> np.ndarray:
 
 # Triton inference logic (공통)
 async def triton_infer_async(inputs: np.ndarray):
-    # Triton 서버의 HTTP 프로토콜 규격에 맞춰 JSON 페이로드 생페
-    payload = {
-        "inputs": [
-            {
-                "name": "input",
-                "shape": inputs.shape,   # (B, F)
-                "datatype": "FP32",
-                "data": inputs.tolist(),
-            }
-        ]
-    }
+    '''
+        FastAPI <-> Triton Inference Server 간 비동기 추론 함수 (gRPC)
+    '''
 
-    # Triton 서버에 추론 요청 전송
-    res = await http_client.post(TRITON_URL, json=payload)
-    # HTTP 에러(4xx, 5xx) 발생 시 예외 처리
-    res.raise_for_status() 
+    # gRPC 클라이언트 연결 (Context Manager 사용 권장)
+    async with grpcclient.InferenceServerClient(url=TRITON_GRPC_URL) as client:
 
-    # Triton 응답에서 모델의 출력 값(Raw logits) 추출
-    outputs = res.json()["outputs"][0]["data"]
+        '''
+            입력 데이터 준비
+            "input": config.pbtxt에 정의된 input name
+            "FP32": 데이터 타입 (numpy 타입과 일치해야 함)
+        '''
+        triton_input = grpcclient.InferInput("input", inputs.shape, "FP32")
+        triton_input.set_data_from_numpy(inputs)
 
-    # Logit 값을 확률로 변환 (Sigmoid 함수 적용) 
-    probs = [1 / (1 + np.exp(-x)) for x in outputs]
+        # 추론 요청
+        try:
+            result = await client.infer(
+                model_name=MODEL_NAME,
+                inputs=[triton_input]
+            )
+        except InferenceServerException as e:
+            print(f"Inference failed: {e}")
+            raise
 
-    return probs
+        # 결과 데이터 추출
+        output_data = result.as_numpy("output").flatten()
+
+        # 모델 이름 & 버전 가져오기
+        response_proto = result.get_response()
+
+        used_model_name = response_proto.model_name
+        used_model_version = response_proto.model_version
+
+        # Logit -> Probability 변환 (Sigmoid)
+        sigmoid_output = 1 / (1 + np.exp(-output_data))
+        probs = sigmoid_output.tolist()
+
+        return probs, used_model_version
 
 async def log_to_rabbitmq(req_data: List[Dict[str, Any]], probs: List[float]):
     if not mq_exchange:
@@ -162,12 +172,12 @@ async def log_to_rabbitmq(req_data: List[Dict[str, Any]], probs: List[float]):
 # 단일 예측
 @app.post("/predict")
 async def predict(req: PredictionRequest):
-    print(f"Single prediction request received")
+    print("Single prediction request received")
 
     inputs = to_tensor([req])  # shape: (1, F)
 
-    probs = await triton_infer_async(inputs)
-    print("Single inference completed.")
+    probs, used_model_version = await triton_infer_async(inputs)
+    print(f"Single inference completed by model version: {used_model_version}")
 
     await log_to_rabbitmq([req.dict()], probs)
     print("Single log sent to RabbitMQ.")
@@ -180,12 +190,12 @@ async def predict(req: PredictionRequest):
 # 배치 예측
 @app.post("/predict/batch")
 async def predict_batch(reqs: List[PredictionRequest]):
-    print(f"Batch prediction request received")
+    print("Batch prediction request received")
 
     inputs = to_tensor(reqs)  # shape: (B, F)
 
-    probs = await triton_infer_async(inputs)
-    print("Batch inference completed.")
+    probs, used_model_version = await triton_infer_async(inputs)
+    print(f"Batch inference completed by model version: {used_model_version}")
 
     req_dicts = [r.dict() for r in reqs]
     await log_to_rabbitmq(req_dicts, probs)

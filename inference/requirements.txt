@@ -3,8 +3,6 @@ uvicorn
 pandas
 torch
 boto3
-tritonclient[http]
-httpx
+tritonclient[grpc]
 prometheus-fastapi-instrumentator
 aio-pika
-flask
